@@ -4,4 +4,14 @@ version = "0.1.0"
 authors = ["Rev. Johnny Healey <rev.null@gmail.com>"]
 edition = "2018"
 
+[lib]
+name = "noisefunge"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "funged"
+path = "src/funged/main.rs"
+
 [dependencies]
+jack = "0.6"
+pancurses = "0.16.1" 
