@@ -19,14 +19,17 @@ pub struct Prog { width : u8, data : Vec<u8> }
 impl Prog {
 
     pub fn parse(prog: &str) -> Result<Prog, &'static str> {
+        if prog.len() == 0 {
+            return Err("Empty program.");
+        }
         let mut lines = Vec::new();
         let mut longest = 0;
         for line in prog.split("\n") {
             lines.push(line);
             longest = max(longest, line.bytes().count());
         }
-        if lines.len() == 0 {
-            return Err("Empty program.");
+        if longest == 0 {
+            return Err("Program is empty.");
         }
         if lines.len() > 255 {
             return Err("Too many lines in program.");
@@ -106,6 +109,23 @@ mod tests {
         assert_eq!(pr.data, vec![49,50,51,52,53,54,55,56,57,48,97,32,32,32,32]);
         assert_eq!(pr.lookup(&PC::new(0,0)), 49);
         assert_eq!(pr.lookup(&PC::new(1,1)), 55);
+    }
+
+    #[test]
+    fn bad_prog() {
+        assert!(Prog::parse("").is_err(), "Empty program");
+        assert!(Prog::parse("\n\n\n\n\n").is_err(), "Only newlines");
+
+        let mut long_line = String::with_capacity(512);
+        let mut too_many = String::with_capacity(512);
+
+        for i in 0..256 {
+            long_line.push_str("a");
+            too_many.push_str("a\n");
+        }
+
+        assert!(Prog::parse(&long_line).is_err(), "Long line");
+        assert!(Prog::parse(&too_many).is_err(), "Too many lines.");
     }
 
 }
