@@ -1,17 +1,13 @@
 
 use std::cmp::max;
 
+#[derive(Copy, Clone)]
 pub enum Dir { U, D, L, R }
 
-pub struct PC { pub row : u8, pub col :u8 }
+#[derive(Copy, Clone)]
+pub struct PC(usize);
 
-impl PC {
-    pub fn new(r: u8, c: u8) -> PC {
-        PC { row : r, col : c }
-    }
-}
-
-pub struct Prog { width : u8, data : Vec<u8> }
+pub struct Prog { width : usize, data : Vec<u8> }
 
 impl Prog {
 
@@ -46,48 +42,121 @@ impl Prog {
                 count += 1
             }
         }
-        Ok(Prog { width : longest as u8, data : mem })
+        Ok(Prog { width : longest, data : mem })
     }
 
-    pub fn rows(&self) -> u8 {
-        (self.data.len() / self.width as usize) as u8
+    pub fn rows(&self) -> usize {
+        self.data.len() / self.width
     }
 
-    pub fn cols(&self) -> u8 {
+    pub fn cols(&self) -> usize {
         self.width
     }
 
-    pub fn lookup(&self, pc : &PC) -> u8 {
-        let i = pc.row as usize * self.width as usize + pc.col as usize;
-        self.data[i]
+    pub fn lookup(&self, pc : PC) -> u8 {
+        let PC(i) = pc;
+        self.data[i as usize]
     }
 }
 
-pub struct ProcessState {
+pub struct ProcessStack {
     memory: Prog,
     pc: PC,
     dir: Dir
+}
+
+#[derive(Copy, Clone)]
+pub enum ProcessState {
+    Running,
+    Blocked,
+    Finished,
+    Crashed(&'static str),
 }
 
 pub struct Process {
     pid: u64,
     input: String,
     output: String,
-    state: Vec<ProcessState>
+    stack: Vec<ProcessStack>,
+    state: ProcessState
 }
 
 impl Process {
     pub fn new(pid: u64, input: &str, output: &str, prog: Prog) ->
                Process {
-        let st = ProcessState { memory: prog,
-                                pc: PC { col : 0, row : 0 },
+        let st = ProcessStack { memory: prog,
+                                pc: PC(0),
                                 dir: Dir::R };
         let mut stvec = Vec::new();
         stvec.push(st);
         Process { pid : pid,
                   input : String::from(input),
                   output : String::from(output),
-                  state : stvec }
+                  stack : stvec,
+                  state : ProcessState::Running }
+    }
+
+    pub fn state(&self) -> ProcessState {
+        self.state
+    }
+
+    fn top(&mut self) -> Option<&mut ProcessStack> {
+        let i = self.stack.len();
+        if i == 0 {
+            return None
+        }
+
+        self.stack.get_mut(i - 1)
+    }
+
+    pub fn dir(&mut self) -> Option<Dir> {
+        let top = self.top()?;
+        Some(top.dir)
+    }
+
+    fn die(&mut self, msg: &'static str) {
+        self.state = ProcessState::Crashed(msg)
+    }
+
+    pub fn step(&mut self) {
+        match self.top() {
+            None => self.state = ProcessState::Finished,
+            Some(top) => {
+                let PC(i) = top.pc;
+                let w = top.memory.cols();
+                let h = top.memory.rows();
+                match top.dir {
+                    Dir::L => {
+                        if i % w == 0 {
+                            self.die("Exited off left edge");
+                            return;
+                        }
+                        top.pc = PC(i - 1);
+                    },
+                    Dir::R => {
+                        if i % w == (w - 1) {
+                            self.die("Exited off right edge");
+                            return;
+                        }
+                        top.pc = PC(i + 1);
+                    }
+                    Dir::U => {
+                        if i / w == 0 {
+                            self.die("Exited off top edge");
+                            return;
+                        }
+                        top.pc = PC(i - w);
+                    },
+                    Dir::D => {
+                        if i / w == h - 1 {
+                            self.die("Exited off bottom edge");
+                            return;
+                        }
+                        top.pc = PC(i - w);
+                    },
+                }
+            }
+        }
     }
 }
 
@@ -104,8 +173,8 @@ mod tests {
         assert_eq!(pr.cols(), 5);
         assert_eq!(pr.rows(), 3);
         assert_eq!(pr.data, vec![49,50,51,52,53,54,55,56,57,48,97,32,32,32,32]);
-        assert_eq!(pr.lookup(&PC::new(0,0)), 49);
-        assert_eq!(pr.lookup(&PC::new(1,1)), 55);
+        assert_eq!(pr.lookup(PC(0)), 49);
+        assert_eq!(pr.lookup(PC(6)), 55);
     }
 
     #[test]
