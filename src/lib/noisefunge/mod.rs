@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::rc::Rc;
-use crate::noisefunge::befunge::{Process, Prog};
+use self::befunge::{Process, Prog};
 
 mod befunge;
 
