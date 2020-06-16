@@ -118,6 +118,10 @@ impl Process {
         self.state = ProcessState::Crashed(msg)
     }
 
+    pub fn set_direction(&mut self, dir: Dir) {
+        self.top().map(|top| top.dir = dir);
+    }
+
     pub fn step(&mut self) {
         match self.top() {
             None => self.state = ProcessState::Finished,
