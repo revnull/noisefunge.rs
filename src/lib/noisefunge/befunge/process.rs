@@ -68,6 +68,7 @@ pub struct ProcessStack {
 #[derive(Copy, Clone)]
 pub enum ProcessState {
     Running,
+    Sleep(u8),
     Blocked,
     Finished,
     Crashed(&'static str),
@@ -77,7 +78,8 @@ pub struct Process {
     pid: u64,
     input: String,
     output: String,
-    stack: Vec<ProcessStack>,
+    data_stack: Vec<u8>,
+    call_stack: Vec<ProcessStack>,
     state: ProcessState
 }
 
@@ -92,7 +94,8 @@ impl Process {
         Process { pid : pid,
                   input : String::from(input),
                   output : String::from(output),
-                  stack : stvec,
+                  data_stack : Vec::new(),
+                  call_stack : stvec,
                   state : ProcessState::Running }
     }
 
@@ -100,18 +103,26 @@ impl Process {
         self.state
     }
 
+    pub fn set_state(&mut self, st: ProcessState) {
+        self.state = st
+    }
+
     fn top(&mut self) -> Option<&mut ProcessStack> {
-        let i = self.stack.len();
+        let i = self.call_stack.len();
         if i == 0 {
             return None
         }
 
-        self.stack.get_mut(i - 1)
+        self.call_stack.get_mut(i - 1)
     }
 
     pub fn dir(&mut self) -> Option<Dir> {
         let top = self.top()?;
         Some(top.dir)
+    }
+
+    pub fn pop(&mut self) -> Option<u8> {
+        self.data_stack.pop()
     }
 
     fn die(&mut self, msg: &'static str) {

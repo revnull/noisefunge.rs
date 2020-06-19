@@ -17,4 +17,5 @@ jack = "0.6"
 pancurses = "~0.16"
 config = "~0.10"
 clap = "~2.33"
+rand = "~0.7"
 
