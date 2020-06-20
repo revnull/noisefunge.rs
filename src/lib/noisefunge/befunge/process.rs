@@ -66,9 +66,15 @@ pub struct ProcessStack {
 }
 
 #[derive(Copy, Clone)]
+pub enum Syscall {
+    Fork,
+    Sleep(u8)
+}
+
+#[derive(Copy, Clone)]
 pub enum ProcessState {
-    Running,
-    Sleep(u8),
+    Running(bool),
+    Trap(Syscall),
     Blocked,
     Finished,
     Crashed(&'static str),
@@ -96,7 +102,7 @@ impl Process {
                   output : String::from(output),
                   data_stack : Vec::new(),
                   call_stack : stvec,
-                  state : ProcessState::Running }
+                  state : ProcessState::Running(false) }
     }
 
     pub fn state(&self) -> ProcessState {
@@ -121,11 +127,15 @@ impl Process {
         Some(top.dir)
     }
 
+    pub fn push(&mut self, i: u8) {
+        self.data_stack.push(i)
+    }
+
     pub fn pop(&mut self) -> Option<u8> {
         self.data_stack.pop()
     }
 
-    fn die(&mut self, msg: &'static str) {
+    pub fn die(&mut self, msg: &'static str) {
         self.state = ProcessState::Crashed(msg)
     }
 
@@ -172,6 +182,10 @@ impl Process {
                 }
             }
         }
+    }
+
+    pub fn trap(&mut self, sys: Syscall) {
+        self.set_state(ProcessState::Trap(sys));
     }
 }
 
