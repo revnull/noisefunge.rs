@@ -122,6 +122,20 @@ impl Process {
         self.call_stack.get_mut(i - 1)
     }
 
+    pub fn call(&mut self, prog: Prog) {
+        self.call_stack.push(
+            ProcessStack { memory : prog,
+                           pc: PC(0),
+                           dir: Dir::R });
+    }
+
+    pub fn r#return(&mut self) {
+        self.call_stack.pop();
+        if self.call_stack.len() == 0 {
+            self.set_state(ProcessState::Finished);
+        }
+    }
+
     pub fn dir(&mut self) -> Option<Dir> {
         let top = self.top()?;
         Some(top.dir)

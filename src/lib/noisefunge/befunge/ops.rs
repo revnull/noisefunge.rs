@@ -61,7 +61,7 @@ impl OpSet {
         ops[94] = Some(set_direction(Dir::U)); // ^
         ops[118] = Some(set_direction(Dir::D)); // v
         ops[63] = Some(Op(Box::new(rand_direction))); // ?
-        ops[64] = Some(Op(Box::new(quit))); // @
+        ops[64] = Some(Op(Box::new(r#return))); // @
 
         for i in 0..=9 { // 0 - 9
             ops[i as usize + 48] = Some(push_int(i));
@@ -117,37 +117,42 @@ fn sleep(proc: &mut Process) {
     proc.trap(Syscall::Sleep(beats));
 }
  
-fn quit(proc: &mut Process) {
-    proc.set_state(ProcessState::Finished);
+fn r#return(proc: &mut Process) {
+    proc.r#return();
 }
 
 fn add(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(x + y);
+    proc.step();
 }
 
 fn sub(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y - x);
+    proc.step();
 }
 
 fn mul(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(x * y);
+    proc.step();
 }
 
 fn div(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y / x);
+    proc.step();
 }
 
 fn r#mod(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y % x);
+    proc.step();
 }
 
