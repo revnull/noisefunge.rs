@@ -27,7 +27,8 @@ struct Engine {
 #[derive(Debug, PartialEq, Eq)]
 pub enum EventLog {
     NewProcess(u64),
-    ProcessOutput(u64, String),
+    ProcessPrintChar(u64, u8),
+    ProcessPrintNum(u64, u8),
     Finished(u64),
     Crashed(u64, &'static str),
 }
@@ -170,6 +171,16 @@ impl Engine {
                         },
                     }
                 },
+                ProcessState::Trap(Syscall::PrintChar(c)) => {
+                    log.push(EventLog::ProcessPrintChar(proc.pid, c));
+                    proc.resume(None);
+                    new_active.push(proc.pid);
+                }
+                ProcessState::Trap(Syscall::PrintNum(c)) => {
+                    log.push(EventLog::ProcessPrintNum(proc.pid, c));
+                    proc.resume(None);
+                    new_active.push(proc.pid);
+                }
                 ProcessState::Finished => {
                     log.push(EventLog::Finished(proc.pid));
                 },
@@ -195,12 +206,13 @@ mod tests {
         let mut eng = Engine::new();
         eng.make_process("a", "b", Prog::parse(">  5.@")
             .expect("Parse failed."));
-        eng.make_process("b", "a", Prog::parse(">~ @")
+        eng.make_process("b", "a", Prog::parse(">~ &@")
             .expect("Parse failed."));
         for i in 1..6  {
             eng.step();
         }
         assert!(eng.step() == vec![EventLog::Finished(1)]);
+        assert!(eng.step() == vec![EventLog::ProcessPrintNum(2, 5)]);
         assert!(eng.step() == vec![EventLog::Finished(2)]);
     }
 }

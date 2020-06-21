@@ -79,6 +79,7 @@ impl OpSet {
 
         ops[46] = Some(Op::new(Box::new(send))); // .
         ops[126] = Some(Op::new(Box::new(receive))); // ~
+        ops[38] = Some(Op::new(Box::new(print_byte))); // &
 
         OpSet(ops)
     }
@@ -189,6 +190,16 @@ fn send(proc: &mut Process) {
 
 fn receive(proc: &mut Process) {
     proc.trap(Syscall::Receive);
+}
+
+fn print_byte(proc: &mut Process) {
+    let c = pop!(proc);
+    proc.trap(Syscall::PrintNum(c));
+}
+
+fn print_char(proc: &mut Process) {
+    let c = pop!(proc);
+    proc.trap(Syscall::PrintChar(c));
 }
 
 #[cfg(test)]
