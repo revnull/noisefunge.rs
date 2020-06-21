@@ -16,6 +16,10 @@ macro_rules! pop {
     }
 }
 
+macro_rules! make_op {
+    ($fn : expr) => { Op::new(Box::new($fn)) }
+}
+
 pub struct OpSet([Option<Op>; 256]);
 
 impl OpSet {
@@ -55,14 +59,14 @@ impl OpSet {
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
         ];
-        ops[32] = Some(Op::new(Box::new(noop))); // Space
+        ops[32] = Some(make_op!(noop)); // Space
         ops[60] = Some(set_direction(Dir::L)); // >
         ops[62] = Some(set_direction(Dir::R)); // <
         ops[94] = Some(set_direction(Dir::U)); // ^
         ops[118] = Some(set_direction(Dir::D)); // v
-        ops[63] = Some(Op::new(Box::new(rand_direction))); // ?
-        ops[59] = Some(Op::new(Box::new(r#return))); // ;
-        ops[64] = Some(Op::new(Box::new(quit))); // @
+        ops[63] = Some(make_op!(rand_direction)); // ?
+        ops[59] = Some(make_op!(r#return)); // ;
+        ops[64] = Some(make_op!(quit)); // @
 
         for i in 0..=9 { // 0 - 9
             ops[i as usize + 48] = Some(push_int(i));
@@ -71,15 +75,16 @@ impl OpSet {
             ops[i as usize + 65] = Some(push_int(10 + i));
         }
 
-        ops[37] = Some(Op::new(Box::new(r#mod))); // %
-        ops[42] = Some(Op::new(Box::new(mul))); // *
-        ops[43] = Some(Op::new(Box::new(add))); // +
-        ops[45] = Some(Op::new(Box::new(sub))); // -
-        ops[47] = Some(Op::new(Box::new(div))); // /
+        ops[37] = Some(make_op!(r#mod)); // %
+        ops[42] = Some(make_op!(mul)); // *
+        ops[43] = Some(make_op!(add)); // +
+        ops[45] = Some(make_op!(sub)); // -
+        ops[47] = Some(make_op!(div)); // /
 
-        ops[46] = Some(Op::new(Box::new(send))); // .
-        ops[126] = Some(Op::new(Box::new(receive))); // ~
-        ops[38] = Some(Op::new(Box::new(print_byte))); // &
+        ops[46] = Some(make_op!(send)); // .
+        ops[126] = Some(make_op!(receive)); // ~
+        ops[38] = Some(make_op!(print_byte)); // &
+        ops[44] = Some(make_op!(print_char)); // ,
 
         OpSet(ops)
     }
@@ -107,7 +112,7 @@ fn push_int(i: u8) -> Op {
         proc.push(i);
         proc.step()
     };
-    Op::new(Box::new(push_i))
+    make_op!(push_i)
 }
 
 fn set_direction(dir: Dir) -> Op {
@@ -115,7 +120,7 @@ fn set_direction(dir: Dir) -> Op {
         proc.set_direction(dir);
         proc.step()
     };
-    Op::new(Box::new(set_dir))
+    make_op!(set_dir)
 }
 
 fn rand_direction(proc: &mut Process) {
