@@ -1,5 +1,7 @@
 
 use rand::Rng;
+use std::rc::Rc;
+
 use super::process::{Process, Prog, ProcessState, Syscall, Dir, Op, PC};
 
 macro_rules! pop {
@@ -59,7 +61,8 @@ impl OpSet {
         ops[94] = Some(set_direction(Dir::U)); // ^
         ops[118] = Some(set_direction(Dir::D)); // v
         ops[63] = Some(Op::new(Box::new(rand_direction))); // ?
-        ops[64] = Some(Op::new(Box::new(r#return))); // @
+        ops[59] = Some(Op::new(Box::new(r#return))); // ;
+        ops[64] = Some(Op::new(Box::new(quit))); // @
 
         for i in 0..=9 { // 0 - 9
             ops[i as usize + 48] = Some(push_int(i));
@@ -132,6 +135,10 @@ fn r#return(proc: &mut Process) {
     proc.r#return();
 }
 
+fn quit(proc: &mut Process) {
+    proc.set_state(ProcessState::Finished);
+}
+
 fn add(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
@@ -167,13 +174,16 @@ fn r#mod(proc: &mut Process) {
     proc.step();
 }
 
+fn fork(proc: &mut Process) {
+    proc.trap(Syscall::Fork)
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn demo_proc() -> Process {
-        Process::new(1, "a", "b",
+        Process::new(1, Rc::from("a"), Rc::from("b"),
             Prog::parse(">    @\n\
                          > 1 2^\n\
                          >45+ ^\n\

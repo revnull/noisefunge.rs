@@ -8,6 +8,7 @@ pub enum Dir { U, D, L, R }
 #[derive(Copy, Clone)]
 pub struct PC(pub usize);
 
+#[derive(Clone)]
 pub struct Prog { width : usize, data : Rc<Vec<u8>> }
 
 impl Prog {
@@ -60,6 +61,7 @@ impl Prog {
     }
 }
 
+#[derive(Clone)]
 pub struct ProcessStack {
     pub memory: Prog,
     pub pc: PC,
@@ -69,7 +71,11 @@ pub struct ProcessStack {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Syscall {
     Fork,
-    Sleep(u8)
+    Sleep(u8),
+    PrintChar(u8),
+    PrintNum(u8),
+    Send(u8),
+    Receive
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -81,17 +87,18 @@ pub enum ProcessState {
     Crashed(&'static str),
 }
 
+#[derive(Clone)]
 pub struct Process {
     pid: u64,
-    input: String,
-    output: String,
+    input: Rc<str>,
+    output: Rc<str>,
     data_stack: Vec<u8>,
     call_stack: Vec<ProcessStack>,
     state: ProcessState
 }
 
 impl Process {
-    pub fn new(pid: u64, input: &str, output: &str, prog: Prog) ->
+    pub fn new(pid: u64, input: Rc<str>, output: Rc<str>, prog: Prog) ->
                Process {
         let st = ProcessStack { memory: prog,
                                 pc: PC(0),
@@ -99,8 +106,8 @@ impl Process {
         let mut stvec = Vec::new();
         stvec.push(st);
         Process { pid : pid,
-                  input : String::from(input),
-                  output : String::from(output),
+                  input : input,
+                  output : output,
                   data_stack : Vec::new(),
                   call_stack : stvec,
                   state : ProcessState::Running(false) }
@@ -212,6 +219,15 @@ impl Process {
         self.set_state(ProcessState::Trap(sys));
     }
 
+    pub fn resume(&mut self, push: Option<u8>) {
+        match push {
+            None => {},
+            Some(c) => self.data_stack.push(c)
+        };
+        self.set_state(ProcessState::Running(false));
+        self.step();
+    }
+
     pub fn apply(&mut self, op: &Op) {
         let Op(f) = op;
         f(self)
@@ -221,6 +237,12 @@ impl Process {
         let top = self.top()?;
         let PC(i) = top.pc;
         Some(top.memory.data[i])
+    }
+
+    pub fn fork(&self, newpid: u64) -> Self {
+        let mut new = self.clone();
+        new.pid = newpid;
+        return new
     }
 }
 
