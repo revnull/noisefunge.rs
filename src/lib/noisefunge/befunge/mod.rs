@@ -6,41 +6,50 @@ pub use self::ops::*;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 enum MessageQueue {
     Empty,
-    ReadBlocked { queue : Vec<u64> },
-    WriteBlocked { queue : Vec<(u8, u64)> }
+    ReadBlocked(VecDeque<u64>),
+    WriteBlocked(VecDeque<(u64, u8)>)
 }
 
 struct Engine {
     next_pid: u64,
-    pids: BTreeMap<u64,Process>,
+    procs: BTreeMap<u64,Process>,
     buffers: BTreeMap<Rc<str>, (Rc<str>, MessageQueue)>,
-    active: BTreeSet<u64>,
+    active: Vec<u64>,
+    sleeping: Vec<(u64, u8)>,
     ops: OpSet
 }
 
-pub enum ChangeLog {
-    NewProcess(u64, Prog),
+pub enum EventLog {
+    NewProcess(u64),
+    ProcessOutput(u64, String),
     Finished(u64),
-    Crashed(u64, String),
+    Crashed(u64, &'static str),
 }
 
 impl Engine {
     pub fn new() -> Engine {
         Engine { next_pid: 1,
-                 pids: BTreeMap::new() ,
+                 procs: BTreeMap::new() ,
                  buffers: BTreeMap::new(),
-                 active: BTreeSet::new(),
+                 active: Vec::new(),
+                 sleeping: Vec::new(),
                  ops: OpSet::new() }
     }
 
-    fn make_process(&mut self, input: &str, output: &str,
-                    prog: Prog) ->
-                    &Process {
+    fn new_pid(&mut self) -> u64 {
         let pid = self.next_pid;
+        self.next_pid += 1;
+        pid
+    }
+
+    fn make_process(&mut self, input: &str, output: &str,
+                    prog: Prog) {
+        let pid = self.new_pid();
 
         let ik = match self.buffers.get(input) {
             None => {
@@ -63,10 +72,91 @@ impl Engine {
 
         let proc = Process::new(pid, ik, ok, prog);
 
-        self.next_pid += 1;
-        self.pids.insert(pid, proc);
-        self.active.insert(pid);
-        self.pids.get(&pid).unwrap()
+        self.procs.insert(pid, proc);
+        self.active.push(pid);
+    }
+
+    fn step(&mut self) -> Vec<EventLog> {
+        let mut log = Vec::new();
+        let mut new_active = Vec::with_capacity(self.active.len());
+        let mut new_sleeping = Vec::with_capacity(self.sleeping.len());
+
+        for &(pid, c) in self.sleeping.iter() {
+            if c == 0 {
+                self.procs.get_mut(&pid).map(|p| p.resume(None));
+                self.active.push(pid);
+            } else {
+                new_sleeping.push((pid, c - 1));
+            }
+        }
+        self.sleeping = new_sleeping;
+
+        for pid in self.active.iter() {
+            let proc = match self.procs.get_mut(pid) {
+                None => continue,
+                Some(p) => p
+            };
+            self.ops.apply_to(proc);
+            match proc.state() {
+                ProcessState::Running(_) => new_active.push(proc.pid),
+                ProcessState::Trap(Syscall::Fork) => {
+                    let pid = self.next_pid;
+                    self.next_pid += 1;
+                    let mut p2 = proc.fork(pid);
+                    proc.resume(Some(0));
+                    p2.resume(Some(1));
+                    new_active.push(proc.pid);
+                    new_active.push(p2.pid);
+                    log.push(EventLog::NewProcess(p2.pid));
+                },
+                ProcessState::Trap(Syscall::Sleep(c)) => {
+                    if c == 0 {
+                        proc.resume(None);
+                        new_active.push(proc.pid);
+                    } else {
+                        self.sleeping.push((proc.pid, c));
+                    }
+                },
+                ProcessState::Trap(Syscall::Send(c)) => {
+                    let mut tup = self.buffers.entry(proc.output.clone())
+                        .or_insert((proc.output.clone(), MessageQueue::Empty));
+                    match &mut tup.1 {
+                        MessageQueue::Empty => {
+                            let mut q = VecDeque::new();
+                            q.push_back((proc.pid, c));
+                            tup.1 = MessageQueue::WriteBlocked(q);
+                        },
+                        MessageQueue::WriteBlocked(q) => {
+                            q.push_back((proc.pid, c));
+                        },
+                        MessageQueue::ReadBlocked(q) => {
+                            proc.resume(None);
+                            new_active.push(proc.pid);
+                            let blocked = q.pop_front()
+                                .expect("Empty ReadBlocked Queue");
+                            let blproc = self.procs.get_mut(&blocked)
+                                .expect("Blocked process not found");
+                            blproc.resume(Some(c));
+                            new_active.push(blproc.pid);
+                            if q.len() == 0 {
+                                tup.1 = MessageQueue::Empty;
+                            }
+                        },
+                        _ => panic!("foo"),
+                    };
+                },
+                ProcessState::Finished => {
+                    log.push(EventLog::Finished(proc.pid));
+                },
+                ProcessState::Crashed(msg) => {
+                    log.push(EventLog::Crashed(proc.pid, msg));
+                }
+                s => panic!("Unhandled state: {:?}", s),
+            }
+        };
+
+        self.active = new_active;
+        log
     }
 
 }

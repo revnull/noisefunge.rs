@@ -82,16 +82,15 @@ pub enum Syscall {
 pub enum ProcessState {
     Running(bool),
     Trap(Syscall),
-    Blocked,
     Finished,
     Crashed(&'static str),
 }
 
 #[derive(Clone)]
 pub struct Process {
-    pid: u64,
-    input: Rc<str>,
-    output: Rc<str>,
+    pub pid: u64,
+    pub input: Rc<str>,
+    pub output: Rc<str>,
     data_stack: Vec<u8>,
     call_stack: Vec<ProcessStack>,
     state: ProcessState
