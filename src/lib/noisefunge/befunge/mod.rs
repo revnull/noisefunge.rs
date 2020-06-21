@@ -24,6 +24,7 @@ struct Engine {
     ops: OpSet
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum EventLog {
     NewProcess(u64),
     ProcessOutput(u64, String),
@@ -185,3 +186,21 @@ impl Engine {
 
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn send_receive_basic() {
+        let mut eng = Engine::new();
+        eng.make_process("a", "b", Prog::parse(">  5.@")
+            .expect("Parse failed."));
+        eng.make_process("b", "a", Prog::parse(">~ @")
+            .expect("Parse failed."));
+        for i in 1..6  {
+            eng.step();
+        }
+        assert!(eng.step() == vec![EventLog::Finished(1)]);
+        assert!(eng.step() == vec![EventLog::Finished(2)]);
+    }
+}

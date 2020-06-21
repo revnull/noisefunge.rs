@@ -77,6 +77,9 @@ impl OpSet {
         ops[45] = Some(Op::new(Box::new(sub))); // -
         ops[47] = Some(Op::new(Box::new(div))); // /
 
+        ops[46] = Some(Op::new(Box::new(send))); // .
+        ops[126] = Some(Op::new(Box::new(receive))); // ~
+
         OpSet(ops)
     }
 
@@ -177,6 +180,15 @@ fn r#mod(proc: &mut Process) {
 
 fn fork(proc: &mut Process) {
     proc.trap(Syscall::Fork)
+}
+
+fn send(proc: &mut Process) {
+    let c = pop!(proc);
+    proc.trap(Syscall::Send(c));
+}
+
+fn receive(proc: &mut Process) {
+    proc.trap(Syscall::Receive);
 }
 
 #[cfg(test)]
