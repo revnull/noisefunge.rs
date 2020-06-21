@@ -1,6 +1,7 @@
 
 use rand::Rng;
 use std::rc::Rc;
+use arr_macro::arr;
 
 use super::process::{Process, Prog, ProcessState, Syscall, Dir, Op, PC};
 
@@ -17,48 +18,14 @@ macro_rules! pop {
 }
 
 macro_rules! make_op {
-    ($fn : expr) => { Op::new(Box::new($fn)) }
+    ($fn : expr) => { Op::new(Rc::new($fn)) }
 }
 
 pub struct OpSet([Option<Op>; 256]);
 
 impl OpSet {
     pub fn new() -> OpSet {
-        let mut ops : [Option<Op>; 256] = [
-            // I guess some 3rd party crates solve this problem...
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, None,
-        ];
+        let mut ops : [Option<Op>; 256] = arr![None;256];
         ops[32] = Some(make_op!(noop)); // Space
         ops[60] = Some(set_direction(Dir::L)); // >
         ops[62] = Some(set_direction(Dir::R)); // <

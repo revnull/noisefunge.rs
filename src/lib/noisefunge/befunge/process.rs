@@ -228,7 +228,7 @@ impl Process {
     }
 
     pub fn apply(&mut self, op: &Op) {
-        let Op(f) = op;
+        let Op(ref f) = op;
         f(self)
     }
 
@@ -245,10 +245,11 @@ impl Process {
     }
 }
 
-pub struct Op(Box<Fn(&mut Process)>);
+#[derive(Clone)]
+pub struct Op(Rc<Fn(&mut Process)>);
 
 impl Op {
-    pub fn new(f: Box<Fn(&mut Process)>) -> Self {
+    pub fn new(f: Rc<Fn(&mut Process)>) -> Self {
         Op(f)
     }
 }
