@@ -6,4 +6,5 @@ mod tests {
     }
 }
 
-mod noisefunge;
+pub mod befunge;
+pub mod jack;
