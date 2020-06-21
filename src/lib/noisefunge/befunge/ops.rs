@@ -1,6 +1,6 @@
 
 use rand::Rng;
-use super::process::{Process, ProcessState, Syscall, Dir};
+use super::process::{Process, Prog, ProcessState, Syscall, Dir, Op, PC};
 
 macro_rules! pop {
     ($proc : ident) => {
@@ -14,12 +14,10 @@ macro_rules! pop {
     }
 }
 
-pub struct Op(Box<Fn(&mut Process)>);
-
-struct OpSet([Option<Op>; 256]);
+pub struct OpSet([Option<Op>; 256]);
 
 impl OpSet {
-    fn new() -> OpSet {
+    pub fn new() -> OpSet {
         let mut ops : [Option<Op>; 256] = [
             // I guess some 3rd party crates solve this problem...
             None, None, None, None, None, None, None, None,
@@ -55,13 +53,13 @@ impl OpSet {
             None, None, None, None, None, None, None, None,
             None, None, None, None, None, None, None, None,
         ];
-        ops[32] = Some(Op(Box::new(noop))); // Space
+        ops[32] = Some(Op::new(Box::new(noop))); // Space
         ops[60] = Some(set_direction(Dir::L)); // >
         ops[62] = Some(set_direction(Dir::R)); // <
         ops[94] = Some(set_direction(Dir::U)); // ^
         ops[118] = Some(set_direction(Dir::D)); // v
-        ops[63] = Some(Op(Box::new(rand_direction))); // ?
-        ops[64] = Some(Op(Box::new(r#return))); // @
+        ops[63] = Some(Op::new(Box::new(rand_direction))); // ?
+        ops[64] = Some(Op::new(Box::new(r#return))); // @
 
         for i in 0..=9 { // 0 - 9
             ops[i as usize + 48] = Some(push_int(i));
@@ -70,14 +68,27 @@ impl OpSet {
             ops[i as usize + 65] = Some(push_int(10 + i));
         }
 
-        ops[37] = Some(Op(Box::new(r#mod))); // %
-        ops[42] = Some(Op(Box::new(mul))); // *
-        ops[43] = Some(Op(Box::new(add))); // +
-        ops[45] = Some(Op(Box::new(sub))); // -
-        ops[47] = Some(Op(Box::new(div))); // /
+        ops[37] = Some(Op::new(Box::new(r#mod))); // %
+        ops[42] = Some(Op::new(Box::new(mul))); // *
+        ops[43] = Some(Op::new(Box::new(add))); // +
+        ops[45] = Some(Op::new(Box::new(sub))); // -
+        ops[47] = Some(Op::new(Box::new(div))); // /
 
         OpSet(ops)
     }
+
+    pub fn apply_to(&self, proc: &mut Process) {
+        let OpSet(ops) = self;
+        let c = match proc.peek() {
+            None => return,
+            Some(c) => c
+        };
+        match &ops[c as usize] {
+            None => return,
+            Some(op) => proc.apply(op)
+        }
+    }
+
 }
 
 fn noop(proc: &mut Process) {
@@ -88,7 +99,7 @@ fn push_int(i: u8) -> Op {
     let push_i = move |proc: &mut Process| {
         proc.push(i)
     };
-    Op(Box::new(push_i))
+    Op::new(Box::new(push_i))
 }
 
 fn set_direction(dir: Dir) -> Op {
@@ -96,7 +107,7 @@ fn set_direction(dir: Dir) -> Op {
         proc.set_direction(dir);
         proc.step()
     };
-    Op(Box::new(set_dir))
+    Op::new(Box::new(set_dir))
 }
 
 fn rand_direction(proc: &mut Process) {
@@ -156,3 +167,39 @@ fn r#mod(proc: &mut Process) {
     proc.step();
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn demo_proc() -> Process {
+        Process::new(1, "a", "b",
+            Prog::parse(">    @\n\
+                         > 1 2^\n\
+                         >45+ ^\n\
+                         >95- ^\n\
+                         >35* ^\n\
+                         >48/ ^\n\
+                         >A7% ^").expect("Bad test program."))
+    }
+
+    #[test]
+    fn test_noop() {
+        let mut proc = demo_proc();
+        proc.top_mut().map(|t| t.pc = PC(1));
+        let ops = OpSet::new();
+        ops.apply_to(&mut proc);
+        let PC(i) = proc.top().expect("Empty top").pc;
+        assert!(i == 2, "PC != 2");
+        assert!(proc.state() == ProcessState::Running(false),
+                "Process is not running.");
+
+        // Rest of program plays out.
+        for _ in 1..10 {
+            ops.apply_to(&mut proc);
+        }
+        assert!(proc.state() == ProcessState::Finished,
+                "Process is not running.");
+    }
+
+}

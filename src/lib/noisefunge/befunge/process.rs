@@ -1,13 +1,14 @@
 
 use std::cmp::max;
+use std::rc::Rc;
 
 #[derive(Copy, Clone)]
 pub enum Dir { U, D, L, R }
 
 #[derive(Copy, Clone)]
-pub struct PC(usize);
+pub struct PC(pub usize);
 
-pub struct Prog { width : usize, data : Vec<u8> }
+pub struct Prog { width : usize, data : Rc<Vec<u8>> }
 
 impl Prog {
 
@@ -42,7 +43,7 @@ impl Prog {
                 count += 1
             }
         }
-        Ok(Prog { width : longest, data : mem })
+        Ok(Prog { width : longest, data : Rc::new(mem) })
     }
 
     pub fn rows(&self) -> usize {
@@ -60,18 +61,18 @@ impl Prog {
 }
 
 pub struct ProcessStack {
-    memory: Prog,
-    pc: PC,
-    dir: Dir
+    pub memory: Prog,
+    pub pc: PC,
+    pub dir: Dir
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Syscall {
     Fork,
     Sleep(u8)
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ProcessState {
     Running(bool),
     Trap(Syscall),
@@ -113,7 +114,16 @@ impl Process {
         self.state = st
     }
 
-    fn top(&mut self) -> Option<&mut ProcessStack> {
+    pub fn top(&self) -> Option<&ProcessStack> {
+        let i = self.call_stack.len();
+        if i == 0 {
+            return None
+        }
+
+        self.call_stack.get(i - 1)
+    }
+
+    pub fn top_mut(&mut self) -> Option<&mut ProcessStack> {
         let i = self.call_stack.len();
         if i == 0 {
             return None
@@ -136,7 +146,7 @@ impl Process {
         }
     }
 
-    pub fn dir(&mut self) -> Option<Dir> {
+    pub fn dir(&self) -> Option<Dir> {
         let top = self.top()?;
         Some(top.dir)
     }
@@ -154,11 +164,11 @@ impl Process {
     }
 
     pub fn set_direction(&mut self, dir: Dir) {
-        self.top().map(|top| top.dir = dir);
+        self.top_mut().map(|top| top.dir = dir);
     }
 
     pub fn step(&mut self) {
-        match self.top() {
+        match self.top_mut() {
             None => self.state = ProcessState::Finished,
             Some(top) => {
                 let PC(i) = top.pc;
@@ -201,8 +211,26 @@ impl Process {
     pub fn trap(&mut self, sys: Syscall) {
         self.set_state(ProcessState::Trap(sys));
     }
+
+    pub fn apply(&mut self, op: &Op) {
+        let Op(f) = op;
+        f(self)
+    }
+
+    pub fn peek(&self) -> Option<u8> {
+        let top = self.top()?;
+        let PC(i) = top.pc;
+        Some(top.memory.data[i])
+    }
 }
 
+pub struct Op(Box<Fn(&mut Process)>);
+
+impl Op {
+    pub fn new(f: Box<Fn(&mut Process)>) -> Self {
+        Op(f)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -215,7 +243,8 @@ mod tests {
                               a").unwrap();
         assert_eq!(pr.cols(), 5);
         assert_eq!(pr.rows(), 3);
-        assert_eq!(pr.data, vec![49,50,51,52,53,54,55,56,57,48,97,32,32,32,32]);
+        let v = vec![49,50,51,52,53,54,55,56,57,48,97,32,32,32,32];
+        assert_eq!(*pr.data, v);
         assert_eq!(pr.lookup(PC(0)), 49);
         assert_eq!(pr.lookup(PC(6)), 55);
     }
