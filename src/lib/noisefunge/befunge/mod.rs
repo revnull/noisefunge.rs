@@ -145,6 +145,30 @@ impl Engine {
                         _ => panic!("foo"),
                     };
                 },
+                ProcessState::Trap(Syscall::Receive) => {
+                    let mut tup = self.buffers.entry(proc.input.clone())
+                        .or_insert((proc.input.clone(), MessageQueue::Empty));
+                    match &mut tup.1 {
+                        MessageQueue::Empty => {
+                            let mut q = VecDeque::new();
+                            q.push_back(proc.pid);
+                            tup.1 = MessageQueue::ReadBlocked(q);
+                        },
+                        MessageQueue::ReadBlocked(q) => {
+                            q.push_back(proc.pid);
+                        },
+                        MessageQueue::WriteBlocked(q) => {
+                            let (blocked, c) = q.pop_front()
+                                .expect("Empty ReadBlocked Queue");
+                            proc.resume(Some(c));
+                            new_active.push(proc.pid);
+                            let blproc = self.procs.get_mut(&blocked)
+                                .expect("Blocked process not found");
+                            blproc.resume(None);
+                            new_active.push(blproc.pid);
+                        },
+                    }
+                },
                 ProcessState::Finished => {
                     log.push(EventLog::Finished(proc.pid));
                 },
