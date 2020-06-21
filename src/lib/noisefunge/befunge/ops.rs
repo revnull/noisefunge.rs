@@ -100,7 +100,8 @@ fn noop(proc: &mut Process) {
 
 fn push_int(i: u8) -> Op {
     let push_i = move |proc: &mut Process| {
-        proc.push(i)
+        proc.push(i);
+        proc.step()
     };
     Op::new(Box::new(push_i))
 }
@@ -182,20 +183,20 @@ fn fork(proc: &mut Process) {
 mod tests {
     use super::*;
 
-    fn demo_proc() -> Process {
+    fn demo_proc_1() -> Process {
         Process::new(1, Rc::from("a"), Rc::from("b"),
             Prog::parse(">    @\n\
                          > 1 2^\n\
                          >45+ ^\n\
                          >95- ^\n\
                          >35* ^\n\
-                         >48/ ^\n\
-                         >A7% ^").expect("Bad test program."))
+                         >C4/ ^\n\
+                         >B7% ^").expect("Bad test program."))
     }
 
     #[test]
     fn test_noop() {
-        let mut proc = demo_proc();
+        let mut proc = demo_proc_1();
         proc.top_mut().map(|t| t.pc = PC(1));
         let ops = OpSet::new();
         ops.apply_to(&mut proc);
@@ -210,6 +211,22 @@ mod tests {
         }
         assert!(proc.state() == ProcessState::Finished,
                 "Process is not running.");
+    }
+
+    #[test]
+    fn test_math_ops() {
+        let mut results = Vec::new();
+        let ops = OpSet::new();
+        for i in 2..7 {
+            let mut proc = demo_proc_1();
+            proc.top_mut().map(|t| t.pc = PC(i * 6));
+            for _ in 1..10 {
+                ops.apply_to(&mut proc);
+            }
+            results.push(pop!(proc));
+        }
+        assert!(results == vec![9,4,15,3,4],
+                "Unexpected results {:?}.", results);
     }
 
 }
