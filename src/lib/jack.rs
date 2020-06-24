@@ -39,6 +39,7 @@ impl<'a> JackHandle {
 
         let beats_in = client.register_port("beats_in", MidiIn::default())
                              .unwrap();
+        let bi_name = &beats_in.name().unwrap();
         let mut locals = HashMap::new();
 
         for name in &conf.locals {
@@ -52,6 +53,9 @@ impl<'a> JackHandle {
 
         let handler = ClosureProcessHandler::new(
             move |cl: &Client, ps: &ProcessScope| -> Control {
+                for bin in beats_in.iter(ps) {
+                    println!("NOT REALTIME SAFE: {:?}", bin);
+                }
                 Control::Continue
             });
 
@@ -69,7 +73,6 @@ impl<'a> JackHandle {
 
         for name in client.ports(Some(&conf.beat_source), None,
                                  PortFlags::IS_OUTPUT) {
-            let bi_name = &beats_in.name().unwrap();
             println!("{} -> {}: {:?}", &name, bi_name,
                      client.connect_ports_by_name(&name, bi_name));
         }
