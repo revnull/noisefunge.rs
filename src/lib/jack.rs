@@ -2,6 +2,7 @@
 use jack::*;
 use std::collections::HashSet;
 use std::collections::HashMap;
+use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 
 #[derive(Clone)]
 pub struct PortConfig {
@@ -23,18 +24,10 @@ impl PortConfig {
     }
 }
 
-struct MidiHandler {
-
-}
-
-impl ProcessHandler for MidiHandler {
-    fn process(&mut self, client: &Client, scope: &ProcessScope) -> Control {
-        Control::Continue
-    }
-}
-
 pub struct JackHandle {
-    client:AsyncClient<(), MidiHandler>,
+    input_chan: Receiver<()>,
+    output_chan: SyncSender<()>,
+    deactivate: Box<FnOnce()>
 }
 
 impl<'a> JackHandle {
@@ -54,8 +47,15 @@ impl<'a> JackHandle {
                           .expect("Failed to register port"));
         }
 
-        let handler = MidiHandler { };
-        let active = client.activate_async((), handler)
+        let (snd1, rcv1) = sync_channel(128);
+        let (snd2, rcv2) = sync_channel(128);
+
+        let handler = ClosureProcessHandler::new(
+            move |cl: &Client, ps: &ProcessScope| -> Control {
+                Control::Continue
+            });
+
+        let active = client.activate_async((),handler)
                            .expect("Failed to activate client.");
         let client = active.as_client();
         for (src, dst) in &conf.connections {
@@ -73,6 +73,11 @@ impl<'a> JackHandle {
             println!("{} -> {}: {:?}", &name, bi_name,
                      client.connect_ports_by_name(&name, bi_name));
         }
-        JackHandle { client : active }
+
+        let deact = Box::new(|| { active.deactivate().unwrap(); });
+
+        JackHandle { input_chan: rcv2,
+                     output_chan: snd1,
+                     deactivate: deact }
     }
 }
