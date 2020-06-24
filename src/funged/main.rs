@@ -14,6 +14,13 @@ fn main() {
     let mut handle = JackHandle::new(&conf);
 
     while true  {
-        thread::sleep(time::Duration::from_secs(1));
+        let i = handle.next_beat();
+        println!("next_beat: {}", i);
+
+        match i % 8 {
+            0 => { handle.send_midi(MidiMsg::On(0, 70, 99));} ,
+            5 => { handle.send_midi(MidiMsg::Off(0, 70)); } ,
+            _ => {}
+        }
     }
 }

@@ -19,4 +19,5 @@ config = "~0.10"
 clap = "~2.33"
 rand = "~0.7"
 arr_macro = "~0.1.3"
+crossbeam-channel = "~0.4.2"
 
