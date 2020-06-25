@@ -1,0 +1,27 @@
+
+ip = "0.0.0.0"
+port = "1312"
+
+[ports]
+beats_in = "jack_midi_clock"
+
+[ports.port1]
+connect = "Qsynth1"
+starting = 0
+
+[ports.port2]
+connect = "Qsynth2"
+starting = 16
+
+[ports.port3]
+connect = "Qsynth3"
+starting = 32
+
+[ports.port4]
+connect = "Qsynth4"
+starting = 48
+
+[ports.port5]
+connect = "Qsynth5"
+starting = 64
+

@@ -1,8 +1,34 @@
 
+extern crate config;
+extern crate clap;
+
 use noisefunge::jack::*;
 use std::{thread, time};
+use std::collections::HashMap;
+
+use clap::{Arg, App};
+
+fn read_config<'a>(file: &'a str) -> config::Config {
+    let mut settings = config::Config::default();
+
+    settings.merge(config::File::with_name(file)).unwrap();
+
+    settings
+}
+
+fn read_args() -> String {
+    let matches = App::new("funged")
+                          .arg(Arg::with_name("CONFIG")
+                               .help("Config file to use")
+                               .required(true))
+                          .get_matches();
+    String::from(matches.value_of("CONFIG").unwrap())
+}
 
 fn main() {
+
+    let cfg = read_config(&read_args());
+    println!("{:?}", cfg);
 
     let mut conf = PortConfig::new("jack_midi_clock");
     conf.connect("ports1", "Qsynth1");
