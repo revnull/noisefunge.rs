@@ -1,3 +1,7 @@
+pub mod befunge;
+pub mod jack;
+pub mod config;
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -6,5 +10,3 @@ mod tests {
     }
 }
 
-pub mod befunge;
-pub mod jack;

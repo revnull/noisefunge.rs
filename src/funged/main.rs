@@ -1,20 +1,13 @@
 
-extern crate config;
 extern crate clap;
+extern crate config;
 
 use noisefunge::jack::*;
+use noisefunge::config::*;
 use std::{thread, time};
 use std::collections::HashMap;
 
 use clap::{Arg, App};
-
-fn read_config<'a>(file: &'a str) -> config::Config {
-    let mut settings = config::Config::default();
-
-    settings.merge(config::File::with_name(file)).unwrap();
-
-    settings
-}
 
 fn read_args() -> String {
     let matches = App::new("funged")
@@ -27,8 +20,7 @@ fn read_args() -> String {
 
 fn main() {
 
-    let cfg = read_config(&read_args());
-    println!("{:?}", cfg);
+    let cfg = FungedConfig::read_config(&read_args());
 
     let mut conf = PortConfig::new("jack_midi_clock");
     conf.connect("ports1", "Qsynth1");
@@ -39,7 +31,7 @@ fn main() {
 
     let mut handle = JackHandle::new(&conf);
 
-    while true  {
+    loop {
         let i = handle.next_beat();
         println!("next_beat: {}", i);
 

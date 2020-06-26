@@ -1,8 +1,7 @@
 
 ip = "0.0.0.0"
-port = "1312"
+port = 1312
 
-[ports]
 beats_in = "jack_midi_clock"
 
 [ports.port1]
