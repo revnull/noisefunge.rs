@@ -10,12 +10,42 @@ pub struct ChannelConfig {
 }
 
 pub struct FungedConfig {
-    ip: IpAddr,
-    port: u16,
-    beat_source: Rc<str>,
-    locals: HashSet<Rc<str>>,
-    connections: Vec<(Rc<str>,Rc<str>)>,
-    channels: [Option<ChannelConfig>; 256]
+    pub ip: IpAddr,
+    pub port: u16,
+    pub beat_source: Rc<str>,
+    pub locals: HashSet<Rc<str>>,
+    pub connections: Vec<(Rc<str>, String)>,
+    pub channels: [Option<ChannelConfig>; 256]
+}
+
+fn get_connections(local: &Rc<str>, table: &HashMap<String, config::Value>)
+                  -> Vec<(Rc<str>,String)> {
+    let mut result = Vec::new();
+
+    let val = match table.get("connect") {
+        None => { return result }
+        Some(v) => v.clone()
+    };
+
+    match val.clone().into_str() {
+        Ok(s) => {
+            result.push((Rc::clone(local), s));
+            return result;
+        }
+        _ => {}
+    };
+
+    match val.try_into() {
+        Ok(a) => {
+            let a : Vec<String> = a;
+            for s in a {
+                result.push((Rc::clone(local), s.clone()));
+            }
+        },
+        _ => panic!("\"connect\" is not string or array of strings")
+    }
+
+    result
 }
 
 impl FungedConfig {
@@ -39,10 +69,10 @@ impl FungedConfig {
         for t in settings.get_table("ports").unwrap_or(HashMap::new()) {
             let (local, block) = t;
             let local = Rc::from(local);
-            let local2 = Rc::clone(&local);
             let table = block.into_table()
                              .expect(&format!("Could not parse section: {}",
                                               local));
+            connections.extend_from_slice(&get_connections(&local, &table));
             locals.insert(local);
         }
 

@@ -20,14 +20,7 @@ fn read_args() -> String {
 
 fn main() {
 
-    let cfg = FungedConfig::read_config(&read_args());
-
-    let mut conf = PortConfig::new("jack_midi_clock");
-    conf.connect("ports1", "Qsynth1");
-    conf.connect("ports2", "Qsynth2");
-    conf.connect("ports3", "Qsynth3");
-    conf.connect("ports4", "Qsynth4");
-    conf.connect("ports5", "Qsynth5");
+    let conf = FungedConfig::read_config(&read_args());
 
     let mut handle = JackHandle::new(&conf);
 

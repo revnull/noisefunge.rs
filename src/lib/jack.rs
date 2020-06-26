@@ -4,25 +4,7 @@ use std::collections::HashSet;
 use std::collections::HashMap;
 use crossbeam_channel::{bounded, Sender, Receiver};
 
-#[derive(Clone)]
-pub struct PortConfig {
-    beat_source: String,
-    locals: HashSet<String>,
-    connections: Vec<(String, String)>
-}
-
-impl PortConfig {
-    pub fn new(beat_source: &str) -> Self {
-        PortConfig { beat_source : String::from(beat_source),
-                     locals : HashSet::new(),
-                     connections : Vec::new() }
-    }
-
-    pub fn connect(&mut self, local: &str, remote: &str) {
-        self.locals.insert(String::from(local));
-        self.connections.push((String::from(local), String::from(remote)));
-    }
-}
+use crate::config::{FungedConfig};
 
 #[derive(Copy, Clone, Debug)]
 pub enum MidiMsg {
@@ -39,7 +21,7 @@ pub struct JackHandle {
 }
 
 impl JackHandle {
-    pub fn new(conf : &PortConfig) -> JackHandle {
+    pub fn new(conf : &FungedConfig) -> JackHandle {
         let (client, status) =
             jack::Client::new("noisefunge",
                               ClientOptions::NO_START_SERVER)
