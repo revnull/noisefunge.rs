@@ -69,7 +69,7 @@ impl FungedConfig {
         let mut channels = arr![None; 256];
         let mut connections = Vec::new();
 
-        for t in settings.get_table("ports").unwrap_or(HashMap::new()) {
+        for t in settings.get_table("out").unwrap_or(HashMap::new()) {
             let (local, block) = t;
             let local = Rc::from(local);
             let table = block.into_table()
@@ -91,6 +91,21 @@ impl FungedConfig {
                 _ => { println!("No starting channel for {}", &local); }
             };
             locals.insert(local);
+        }
+
+        for t in settings.get_table("channel").unwrap_or(HashMap::new()) {
+            let (name, block) = t;
+
+            let i = name.parse::<u8>().expect(
+                &format!("channel.{} is invalid. must be int.", name));
+            let ch = channels[i as usize].as_mut().expect(
+                &format!("channel.{} has no output port", name));
+            let table = block.into_table().expect(
+                &format!("Could not parse [channel.{}]", name));
+            table.get("bank").and_then(|v| v.clone().into_int().ok())
+                             .map(|b| ch.bank = Some(b as u8));
+            table.get("program").and_then(|v| v.clone().into_int().ok())
+                                .map(|b| ch.bank = Some(b as u8));
         }
 
         FungedConfig { ip: ip,
