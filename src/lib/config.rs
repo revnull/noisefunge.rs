@@ -7,6 +7,9 @@ use std::net::IpAddr;
 use std::rc::Rc;
 
 pub struct ChannelConfig {
+    local: Rc<str>,
+    bank: Option<u8>,
+    program: Option<u8>
 }
 
 pub struct FungedConfig {
@@ -73,6 +76,20 @@ impl FungedConfig {
                              .expect(&format!("Could not parse section: {}",
                                               local));
             connections.extend_from_slice(&get_connections(&local, &table));
+            match table.get("starting").and_then(|v| v.clone().into_int().ok()) {
+                Some(ch) => {
+                    let end = table.get("ending")
+                                   .and_then(|v| v.clone().into_int().ok())
+                                   .unwrap_or(ch + 15);
+                    for i in ch..=end {
+                        channels[i as usize] = Some(
+                            ChannelConfig { local: Rc::clone(&local),
+                                            bank: None,
+                                            program: None });
+                    }
+                }
+                _ => { println!("No starting channel for {}", &local); }
+            };
             locals.insert(local);
         }
 

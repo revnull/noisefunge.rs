@@ -24,3 +24,9 @@ starting = 48
 connect = "Qsynth5"
 starting = 64
 
+[channel.0]
+program = 0
+
+[channel.1]
+program = 5
+
