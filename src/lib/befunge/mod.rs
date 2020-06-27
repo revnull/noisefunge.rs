@@ -15,7 +15,7 @@ enum MessageQueue {
     WriteBlocked(VecDeque<(u64, u8)>)
 }
 
-struct Engine {
+pub struct Engine {
     next_pid: u64,
     procs: BTreeMap<u64,Process>,
     buffers: BTreeMap<Rc<str>, (Rc<str>, MessageQueue)>,

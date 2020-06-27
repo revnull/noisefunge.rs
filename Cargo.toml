@@ -20,5 +20,5 @@ crossbeam-channel = "0.4.2"
 pancurses = "0.16"
 config = "0.9"
 clap = "2.33"
-hyper = "0.12.35"
+simple-server = "0.4.0"
 

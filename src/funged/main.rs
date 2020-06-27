@@ -3,9 +3,12 @@ extern crate clap;
 extern crate config;
 
 use noisefunge::jack::*;
+use noisefunge::server::*;
+use noisefunge::befunge::*;
 use noisefunge::config::*;
 use std::{thread, time};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use clap::{Arg, App};
 
@@ -23,6 +26,9 @@ fn main() {
     let conf = FungedConfig::read_config(&read_args());
 
     let mut handle = JackHandle::new(&conf);
+
+    let eng = Arc::new(Mutex::new(Engine::new()));
+    let serv = ServerHandle::new(&conf, eng);
 
     loop {
         let i = handle.next_beat();

@@ -3,7 +3,6 @@ extern crate config;
 
 use arr_macro::arr;
 use std::collections::{HashSet, HashMap};
-use std::net::IpAddr;
 use std::rc::Rc;
 
 pub struct ChannelConfig {
@@ -13,7 +12,7 @@ pub struct ChannelConfig {
 }
 
 pub struct FungedConfig {
-    pub ip: IpAddr,
+    pub host: String,
     pub port: u16,
     pub beat_source: Rc<str>,
     pub locals: HashSet<Rc<str>>,
@@ -55,13 +54,12 @@ impl FungedConfig {
     pub fn read_config(file: &str) -> FungedConfig {
         let mut settings = config::Config::default();
 
-        settings.set_default("ip", "0.0.0.0").unwrap();
+        settings.set_default("host", "127.0.0.1").unwrap();
         settings.set_default("port", 1312).unwrap();
 
         settings.merge(config::File::with_name(&file)).unwrap();
         println!("{:?}", settings);
-        let ip = settings.get_str("ip").expect("IP Address not set")
-                                       .parse().expect("Could not parse IP");
+        let host = settings.get_str("host").unwrap();
         let port = settings.get_int("port").expect("Port not set") as u16;
         let bi = settings.get_str("beats_in").expect("Beats in not found.");
 
@@ -108,7 +106,7 @@ impl FungedConfig {
                                 .map(|b| ch.bank = Some(b as u8));
         }
 
-        FungedConfig { ip: ip,
+        FungedConfig { host: host,
                        port: port,
                        beat_source: Rc::from(bi),
                        locals: locals,
