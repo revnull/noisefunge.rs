@@ -27,8 +27,7 @@ fn main() {
 
     let mut handle = JackHandle::new(&conf);
 
-    let eng = Arc::new(Mutex::new(Engine::new()));
-    let serv = ServerHandle::new(&conf, eng);
+    let serv = ServerHandle::new(&conf);
 
     loop {
         let i = handle.next_beat();

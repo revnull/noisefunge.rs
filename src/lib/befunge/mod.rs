@@ -50,7 +50,7 @@ impl Engine {
     }
 
     fn make_process(&mut self, input: &str, output: &str,
-                    prog: Prog) {
+                    prog: Prog) -> u64 {
         let pid = self.new_pid();
 
         let ik = match self.buffers.get(input) {
@@ -76,6 +76,7 @@ impl Engine {
 
         self.procs.insert(pid, proc);
         self.active.push(pid);
+        pid
     }
 
     fn step(&mut self) -> Vec<EventLog> {
