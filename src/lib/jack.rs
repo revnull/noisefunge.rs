@@ -15,7 +15,7 @@ pub enum MidiMsg {
 unsafe impl Send for MidiMsg {}
 
 pub struct JackHandle {
-    beat_channel: Receiver<u64>,
+    pub beat_channel: Receiver<u64>,
     note_channel: Sender<MidiMsg>,
     deactivate: Box<FnOnce()>
 }

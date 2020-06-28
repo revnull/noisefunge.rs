@@ -1,6 +1,8 @@
 
 extern crate clap;
 extern crate config;
+#[macro_use]
+extern crate crossbeam_channel;
 
 use noisefunge::jack::*;
 use noisefunge::server::*;
@@ -9,6 +11,7 @@ use noisefunge::config::*;
 use std::{thread, time};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use crossbeam_channel::select;
 
 use clap::{Arg, App};
 
@@ -30,13 +33,20 @@ fn main() {
     let serv = ServerHandle::new(&conf);
 
     loop {
-        let i = handle.next_beat();
-        println!("next_beat: {}", i);
+        select! {
+            recv(handle.beat_channel) -> msg => {
+                let i = msg.expect("Failed to read from beat channel.");
+                println!("next_beat: {}", i);
 
-        match i % 8 {
-            0 => { handle.send_midi(MidiMsg::On(0, 70, 99));} ,
-            5 => { handle.send_midi(MidiMsg::Off(0, 70)); } ,
-            _ => {}
+                match i % 8 {
+                    0 => { handle.send_midi(MidiMsg::On(0, 70, 99));} ,
+                    5 => { handle.send_midi(MidiMsg::Off(0, 70)); } ,
+                    _ => {}
+                };
+            },
+            recv(serv.channel) -> msg => {
+                println!("Here: {:?}", msg);
+            }
         }
     }
 }
