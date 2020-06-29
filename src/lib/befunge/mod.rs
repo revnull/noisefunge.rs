@@ -5,7 +5,7 @@ pub use self::process::*;
 pub use self::ops::*;
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
@@ -17,6 +17,7 @@ enum MessageQueue {
 
 pub struct Engine {
     next_pid: u64,
+    progs: HashSet<Rc<Prog>>,
     procs: BTreeMap<u64,Process>,
     buffers: BTreeMap<Rc<str>, (Rc<str>, MessageQueue)>,
     active: Vec<u64>,
@@ -36,7 +37,8 @@ pub enum EventLog {
 impl Engine {
     pub fn new() -> Engine {
         Engine { next_pid: 1,
-                 procs: BTreeMap::new() ,
+                 progs: HashSet::new(),
+                 procs: BTreeMap::new(),
                  buffers: BTreeMap::new(),
                  active: Vec::new(),
                  sleeping: Vec::new(),
@@ -52,6 +54,15 @@ impl Engine {
     fn make_process(&mut self, input: &str, output: &str,
                     prog: Prog) -> u64 {
         let pid = self.new_pid();
+
+        let rcprog = Rc::new(prog);
+        let prog = match self.progs.get(&rcprog) {
+            None => {
+                self.progs.insert(rcprog.clone());
+                rcprog
+            },
+            Some(p) => p.clone()
+        };
 
         let ik = match self.buffers.get(input) {
             None => {

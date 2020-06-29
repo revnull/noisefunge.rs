@@ -8,8 +8,8 @@ pub enum Dir { U, D, L, R }
 #[derive(Copy, Clone)]
 pub struct PC(pub usize);
 
-#[derive(Clone)]
-pub struct Prog { width : usize, data : Rc<Vec<u8>> }
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Prog { width : usize, data : Vec<u8> }
 
 impl Prog {
 
@@ -44,7 +44,7 @@ impl Prog {
                 count += 1
             }
         }
-        Ok(Prog { width : longest, data : Rc::new(mem) })
+        Ok(Prog { width : longest, data : mem })
     }
 
     pub fn rows(&self) -> usize {
@@ -63,7 +63,7 @@ impl Prog {
 
 #[derive(Clone)]
 pub struct ProcessStack {
-    pub memory: Prog,
+    pub memory: Rc<Prog>,
     pub pc: PC,
     pub dir: Dir
 }
@@ -97,7 +97,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(pid: u64, input: Rc<str>, output: Rc<str>, prog: Prog) ->
+    pub fn new(pid: u64, input: Rc<str>, output: Rc<str>, prog: Rc<Prog>) ->
                Process {
         let st = ProcessStack { memory: prog,
                                 pc: PC(0),
@@ -138,7 +138,7 @@ impl Process {
         self.call_stack.get_mut(i - 1)
     }
 
-    pub fn call(&mut self, prog: Prog) {
+    pub fn call(&mut self, prog: Rc<Prog>) {
         self.call_stack.push(
             ProcessStack { memory : prog,
                            pc: PC(0),
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(pr.cols(), 5);
         assert_eq!(pr.rows(), 3);
         let v = vec![49,50,51,52,53,54,55,56,57,48,97,32,32,32,32];
-        assert_eq!(*pr.data, v);
+        assert_eq!(pr.data, v);
         assert_eq!(pr.lookup(PC(0)), 49);
         assert_eq!(pr.lookup(PC(6)), 55);
     }

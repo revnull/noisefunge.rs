@@ -180,13 +180,13 @@ mod tests {
 
     fn demo_proc_1() -> Process {
         Process::new(1, Rc::from("a"), Rc::from("b"),
-            Prog::parse(">    @\n\
-                         > 1 2^\n\
-                         >45+ ^\n\
-                         >95- ^\n\
-                         >35* ^\n\
-                         >C4/ ^\n\
-                         >B7% ^").expect("Bad test program."))
+            Rc::new(Prog::parse(">    @\n\
+                                 > 1 2^\n\
+                                 >45+ ^\n\
+                                 >95- ^\n\
+                                 >35* ^\n\
+                                 >C4/ ^\n\
+                                 >B7% ^").expect("Bad test program.")))
     }
 
     #[test]
