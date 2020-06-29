@@ -21,4 +21,5 @@ pancurses = "0.16"
 config = "0.9"
 clap = "2.33"
 simple-server = "0.4.0"
+http = "0.1"
 
