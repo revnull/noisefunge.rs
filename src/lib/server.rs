@@ -39,7 +39,7 @@ impl<T> Responder<T> {
 #[derive(Debug)]
 pub enum FungeRequest {
     StartProcess(String, String, String, Responder<Result<u64,String>>),
-    GetProcess(u64, Responder<Option<String>>),
+    GetProcess(u64, Responder<Option<Vec<u8>>>),
 }
 
 unsafe impl Send for FungeRequest {}
