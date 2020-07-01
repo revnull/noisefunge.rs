@@ -1,9 +1,4 @@
 
-extern crate clap;
-extern crate config;
-#[macro_use]
-extern crate crossbeam_channel;
-
 use noisefunge::jack::*;
 use noisefunge::server::*;
 use noisefunge::server::FungeRequest::*;

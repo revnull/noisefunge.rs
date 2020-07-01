@@ -12,6 +12,10 @@ path = "src/lib/lib.rs"
 name = "funged"
 path = "src/funged/main.rs"
 
+[[bin]]
+name = "nfviewer"
+path = "src/nfviewer/main.rs"
+
 [dependencies]
 rand = "0.7"
 jack = "0.6"
