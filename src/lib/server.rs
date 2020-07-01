@@ -1,19 +1,24 @@
-extern crate simple_server;
 
 use simple_server::*;
 use std::thread;
 use std::sync::{Arc, Mutex, Condvar};
 use crossbeam_channel::{bounded, Sender, Receiver};
 use http::uri::Parts;
+use serde_json::{from_str, to_vec};
 
 use crate::config::{FungedConfig};
+use crate::api::*;
 
 #[derive(Debug,Clone)]
 pub struct Responder<T>(Arc<(Mutex<Option<T>>, Condvar)>);
 unsafe impl<T: Send> Send for Responder<T> {}
 
 impl<T> Responder<T> {
-    fn wait_for(&self) -> T {
+    fn new() -> Self {
+        Responder(Arc::new((Mutex::new(None), Condvar::new())))
+    }
+
+    fn wait(&self) -> T {
         let Responder(arc) = self;
         let lock = &arc.0;
         let cond = &arc.1;
@@ -26,7 +31,7 @@ impl<T> Responder<T> {
         val.take().unwrap()
     }
 
-    fn respond(&self,t: T) {
+    pub fn respond(&self,t: T) {
         let Responder(arc) = self;
         let lock = &arc.0;
         let cond = &arc.1;
@@ -67,12 +72,40 @@ fn handle_GET(sender: Arc<Sender<FungeRequest>>,
     resp.status(404).body(Vec::new()).map_err(|e| Error::from(e))
 }
 
+fn new_process(sender: Arc<Sender<FungeRequest>>, body: Vec<u8>)
+    -> Result<Vec<u8>, String> {
+
+    let body = String::from_utf8(body).map_err(|e| format!("{}", e))?;
+    let req: NewProcessReq =
+        serde_json::from_str(&body).map_err(|e| format!("{}", e))?;
+
+    let responder = Responder::new();
+    let msg = FungeRequest::StartProcess(req.input, req.output,
+                                         req.program, responder.clone());
+    sender.send(msg);
+
+    let resp = NewProcessResp { pid: responder.wait()? };
+    serde_json::to_vec(&resp).map_err(|e| format!("{}", e))
+}
+
 fn handle_POST(sender: Arc<Sender<FungeRequest>>,
                req: Request<Vec<u8>>, mut resp: ResponseBuilder)
                -> ResponseResult {
 
     let uri = req.uri();
 
+    if uri.path() == "/process" {
+        match new_process(sender, req.into_body()) {
+            Ok(bytes) => {
+                return resp.status(200).body(bytes)
+                           .map_err(|e| Error::from(e));
+                },
+            Err(s) => {
+                return resp.status(400).body(s.into_bytes())
+                           .map_err(|e| Error::from(e));
+            }
+        }
+    }
 
     resp.status(404).body(Vec::new()).map_err(|e| Error::from(e))
 }

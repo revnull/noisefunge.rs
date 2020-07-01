@@ -1,14 +1,15 @@
 
 use std::cmp::max;
 use std::rc::Rc;
+use serde::{Serialize, Deserialize};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum Dir { U, D, L, R }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct PC(pub usize);
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Prog { width : usize, data : Vec<u8> }
 
 impl Prog {

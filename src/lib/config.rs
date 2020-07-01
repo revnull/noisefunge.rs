@@ -1,6 +1,4 @@
 
-extern crate config;
-
 use arr_macro::arr;
 use std::collections::{HashSet, HashMap};
 use std::rc::Rc;

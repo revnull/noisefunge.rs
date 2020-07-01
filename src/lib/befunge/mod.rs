@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use serde::{Serialize, Deserialize};
 
 enum MessageQueue {
     Empty,
@@ -25,7 +26,7 @@ pub struct Engine {
     ops: OpSet
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventLog {
     NewProcess(u64),
     ProcessPrintChar(u64, u8),
@@ -51,8 +52,8 @@ impl Engine {
         pid
     }
 
-    fn make_process(&mut self, input: &str, output: &str,
-                    prog: Prog) -> u64 {
+    pub fn make_process(&mut self, input: &str, output: &str,
+                        prog: Prog) -> u64 {
         let pid = self.new_pid();
 
         let rcprog = Rc::new(prog);

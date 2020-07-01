@@ -31,6 +31,7 @@ fn main() {
     let mut handle = JackHandle::new(&conf);
 
     let serv = ServerHandle::new(&conf);
+    let mut eng = Engine::new();
 
     loop {
         select! {
@@ -46,6 +47,16 @@ fn main() {
             },
             recv(serv.channel) -> msg => {
                 println!("Here: {:?}", msg);
+                match msg {
+                    Ok(FungeRequest::StartProcess(inp, outp, prog, rspndr)) => {
+                        rspndr.respond(match Prog::parse(&prog) {
+                            Ok(p) => Ok(eng.make_process(&inp, &outp, p)),
+                            Err(e) => Err(e.to_string())
+                        });
+                    },
+                    Err(e) => println!("Error: {}", e),
+                    s => println!("Unparsed: {:?}", s),
+                };
             }
         }
     }
