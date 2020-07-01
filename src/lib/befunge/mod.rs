@@ -91,7 +91,7 @@ impl Engine {
         pid
     }
 
-    fn step(&mut self) -> Vec<EventLog> {
+    pub fn step(&mut self) -> Vec<EventLog> {
         let mut log = Vec::new();
         let mut new_active = Vec::with_capacity(self.active.len());
         let mut new_sleeping = Vec::with_capacity(self.sleeping.len());

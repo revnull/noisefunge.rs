@@ -6,6 +6,7 @@ extern crate crossbeam_channel;
 
 use noisefunge::jack::*;
 use noisefunge::server::*;
+use noisefunge::server::FungeRequest::*;
 use noisefunge::befunge::*;
 use noisefunge::config::*;
 use std::{thread, time};
@@ -24,6 +25,17 @@ fn read_args() -> String {
     String::from(matches.value_of("CONFIG").unwrap())
 }
 
+fn handle_server_request(engine: &mut Engine, request: FungeRequest) {
+    match request {
+        StartProcess(chin, chout, prog, rspndr) =>
+            rspndr.respond(match Prog::parse(&prog) {
+                Ok(p) => Ok(engine.make_process(&chin, &chout, p)),
+                Err(e) => Err(e.to_string())
+            }),
+        r => panic!("Failed to handle: {:?}", r),
+    };
+}
+
 fn main() {
 
     let conf = FungedConfig::read_config(&read_args());
@@ -38,7 +50,10 @@ fn main() {
             recv(handle.beat_channel) -> msg => {
                 let i = msg.expect("Failed to read from beat channel.");
                 println!("next_beat: {}", i);
-
+                let notes = eng.step();
+                for n in notes {
+                    println!("log: {:?}", n);
+                };
                 match i % 8 {
                     0 => { handle.send_midi(MidiMsg::On(0, 70, 99));} ,
                     5 => { handle.send_midi(MidiMsg::Off(0, 70)); } ,
@@ -48,14 +63,8 @@ fn main() {
             recv(serv.channel) -> msg => {
                 println!("Here: {:?}", msg);
                 match msg {
-                    Ok(FungeRequest::StartProcess(inp, outp, prog, rspndr)) => {
-                        rspndr.respond(match Prog::parse(&prog) {
-                            Ok(p) => Ok(eng.make_process(&inp, &outp, p)),
-                            Err(e) => Err(e.to_string())
-                        });
-                    },
-                    Err(e) => println!("Error: {}", e),
-                    s => println!("Unparsed: {:?}", s),
+                    Ok(req) => handle_server_request(&mut eng, req),
+                    Err(e) => println!("Unknown error: {:?}", e),
                 };
             }
         }
