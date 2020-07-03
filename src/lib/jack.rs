@@ -17,7 +17,7 @@ unsafe impl Send for MidiMsg {}
 pub struct JackHandle {
     pub beat_channel: Receiver<u64>,
     note_channel: Sender<MidiMsg>,
-    deactivate: Box<FnOnce()>
+    deactivate: Box<dyn FnOnce()>
 }
 
 impl JackHandle {

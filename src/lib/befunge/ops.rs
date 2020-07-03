@@ -156,12 +156,14 @@ fn fork(proc: &mut Process) {
 }
 
 fn send(proc: &mut Process) {
-    let c = pop!(proc);
-    proc.trap(Syscall::Send(c));
+    let ch = pop!(proc); // channel
+    let c = pop!(proc); // value
+    proc.trap(Syscall::Send(ch, c));
 }
 
 fn receive(proc: &mut Process) {
-    proc.trap(Syscall::Receive);
+    let ch = pop!(proc);
+    proc.trap(Syscall::Receive(ch));
 }
 
 fn print_byte(proc: &mut Process) {
@@ -179,7 +181,7 @@ mod tests {
     use super::*;
 
     fn demo_proc_1() -> Process {
-        Process::new(1, Rc::from("a"), Rc::from("b"),
+        Process::new(1,
             Rc::new(Prog::parse(">    @\n\
                                  > 1 2^\n\
                                  >45+ ^\n\

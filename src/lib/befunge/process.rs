@@ -75,8 +75,8 @@ pub enum Syscall {
     Sleep(u8),
     PrintChar(u8),
     PrintNum(u8),
-    Send(u8),
-    Receive
+    Send(u8,u8),
+    Receive(u8)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -90,24 +90,19 @@ pub enum ProcessState {
 #[derive(Clone)]
 pub struct Process {
     pub pid: u64,
-    pub input: Rc<str>,
-    pub output: Rc<str>,
     data_stack: Vec<u8>,
     call_stack: Vec<ProcessStack>,
     state: ProcessState
 }
 
 impl Process {
-    pub fn new(pid: u64, input: Rc<str>, output: Rc<str>, prog: Rc<Prog>) ->
-               Process {
+    pub fn new(pid: u64, prog: Rc<Prog>) -> Process {
         let st = ProcessStack { memory: prog,
                                 pc: PC(0),
                                 dir: Dir::R };
         let mut stvec = Vec::new();
         stvec.push(st);
         Process { pid : pid,
-                  input : input,
-                  output : output,
                   data_stack : Vec::new(),
                   call_stack : stvec,
                   state : ProcessState::Running(false) }
@@ -247,10 +242,10 @@ impl Process {
 }
 
 #[derive(Clone)]
-pub struct Op(Rc<Fn(&mut Process)>);
+pub struct Op(Rc<dyn Fn(&mut Process)>);
 
 impl Op {
-    pub fn new(f: Rc<Fn(&mut Process)>) -> Self {
+    pub fn new(f: Rc<dyn Fn(&mut Process)>) -> Self {
         Op(f)
     }
 }

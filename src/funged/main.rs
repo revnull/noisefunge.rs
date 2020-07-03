@@ -22,9 +22,9 @@ fn read_args() -> String {
 
 fn handle_server_request(engine: &mut Engine, request: FungeRequest) {
     match request {
-        StartProcess(chin, chout, prog, rspndr) =>
+        StartProcess(prog, rspndr) =>
             rspndr.respond(match Prog::parse(&prog) {
-                Ok(p) => Ok(engine.make_process(&chin, &chout, p)),
+                Ok(p) => Ok(engine.make_process(p)),
                 Err(e) => Err(e.to_string())
             }),
         r => panic!("Failed to handle: {:?}", r),

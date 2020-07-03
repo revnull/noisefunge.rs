@@ -4,12 +4,14 @@ mod ops;
 pub use self::process::*;
 pub use self::ops::*;
 
+use arr_macro::arr;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
+#[derive(Debug)]
 enum MessageQueue {
     Empty,
     ReadBlocked(VecDeque<u64>),
@@ -20,7 +22,7 @@ pub struct Engine {
     next_pid: u64,
     progs: HashSet<Rc<Prog>>,
     procs: BTreeMap<u64,Process>,
-    buffers: BTreeMap<Rc<str>, (Rc<str>, MessageQueue)>,
+    buffers: [MessageQueue; 256],
     active: Vec<u64>,
     sleeping: Vec<(u64, u8)>,
     ops: OpSet
@@ -40,7 +42,7 @@ impl Engine {
         Engine { next_pid: 1,
                  progs: HashSet::new(),
                  procs: BTreeMap::new(),
-                 buffers: BTreeMap::new(),
+                 buffers: arr![MessageQueue::Empty; 256],
                  active: Vec::new(),
                  sleeping: Vec::new(),
                  ops: OpSet::new() }
@@ -52,8 +54,7 @@ impl Engine {
         pid
     }
 
-    pub fn make_process(&mut self, input: &str, output: &str,
-                        prog: Prog) -> u64 {
+    pub fn make_process(&mut self, prog: Prog) -> u64 {
         let pid = self.new_pid();
 
         let rcprog = Rc::new(prog);
@@ -65,26 +66,7 @@ impl Engine {
             Some(p) => p.clone()
         };
 
-        let ik = match self.buffers.get(input) {
-            None => {
-                let k = Rc::from(input);
-                self.buffers.insert(Rc::clone(&k),
-                                    (Rc::clone(&k), MessageQueue::Empty));
-                k
-            },
-            Some((k, v)) => k.clone()
-        };
-        let ok = match self.buffers.get(output) {
-            None => {
-                let k = Rc::from(output);
-                self.buffers.insert(Rc::clone(&k),
-                                    (Rc::clone(&k), MessageQueue::Empty));
-                k
-            },
-            Some((k, v)) => k.clone()
-        };
-
-        let proc = Process::new(pid, ik, ok, prog);
+        let proc = Process::new(pid, prog);
 
         self.procs.insert(pid, proc);
         self.active.push(pid);
@@ -132,14 +114,14 @@ impl Engine {
                         self.sleeping.push((proc.pid, c));
                     }
                 },
-                ProcessState::Trap(Syscall::Send(c)) => {
-                    let mut tup = self.buffers.entry(proc.output.clone())
-                        .or_insert((proc.output.clone(), MessageQueue::Empty));
-                    match &mut tup.1 {
+                ProcessState::Trap(Syscall::Send(ch, c)) => {
+                    let i = ch as usize;
+                    let buf = &mut self.buffers[i];
+                    match buf {
                         MessageQueue::Empty => {
                             let mut q = VecDeque::new();
                             q.push_back((proc.pid, c));
-                            tup.1 = MessageQueue::WriteBlocked(q);
+                            *buf = MessageQueue::WriteBlocked(q);
                         },
                         MessageQueue::WriteBlocked(q) => {
                             q.push_back((proc.pid, c));
@@ -154,20 +136,19 @@ impl Engine {
                             blproc.resume(Some(c));
                             new_active.push(blproc.pid);
                             if q.len() == 0 {
-                                tup.1 = MessageQueue::Empty;
+                                *buf = MessageQueue::Empty;
                             }
                         },
-                        _ => panic!("foo"),
                     };
                 },
-                ProcessState::Trap(Syscall::Receive) => {
-                    let mut tup = self.buffers.entry(proc.input.clone())
-                        .or_insert((proc.input.clone(), MessageQueue::Empty));
-                    match &mut tup.1 {
+                ProcessState::Trap(Syscall::Receive(ch)) => {
+                    let i = ch as usize;
+                    let buf = &mut self.buffers[i];
+                    match buf {
                         MessageQueue::Empty => {
                             let mut q = VecDeque::new();
                             q.push_back(proc.pid);
-                            tup.1 = MessageQueue::ReadBlocked(q);
+                            *buf = MessageQueue::ReadBlocked(q);
                         },
                         MessageQueue::ReadBlocked(q) => {
                             q.push_back(proc.pid);
@@ -181,6 +162,9 @@ impl Engine {
                                 .expect("Blocked process not found");
                             blproc.resume(None);
                             new_active.push(blproc.pid);
+                            if q.len() == 0 {
+                                *buf = MessageQueue::Empty;
+                            }
                         },
                     }
                 },
@@ -217,11 +201,11 @@ mod tests {
     #[test]
     fn send_receive_basic() {
         let mut eng = Engine::new();
-        eng.make_process("a", "b", Prog::parse(">  5.@")
+        eng.make_process(Prog::parse(">  50.@")
             .expect("Parse failed."));
-        eng.make_process("b", "a", Prog::parse(">~ &@")
+        eng.make_process(Prog::parse(">0~ &@")
             .expect("Parse failed."));
-        for i in 1..6  {
+        for i in 1..7  {
             eng.step();
         }
         assert!(eng.step() == vec![EventLog::Finished(1)]);

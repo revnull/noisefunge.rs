@@ -43,7 +43,7 @@ impl<T> Responder<T> {
 
 #[derive(Debug)]
 pub enum FungeRequest {
-    StartProcess(String, String, String, Responder<Result<u64,String>>),
+    StartProcess(String, Responder<Result<u64,String>>),
     GetProcess(u64, Responder<Option<Vec<u8>>>),
 }
 
@@ -80,8 +80,7 @@ fn new_process(sender: Arc<Sender<FungeRequest>>, body: Vec<u8>)
         serde_json::from_str(&body).map_err(|e| format!("{}", e))?;
 
     let responder = Responder::new();
-    let msg = FungeRequest::StartProcess(req.input, req.output,
-                                         req.program, responder.clone());
+    let msg = FungeRequest::StartProcess(req.program, responder.clone());
     sender.send(msg);
 
     let resp = NewProcessResp { pid: responder.wait()? };

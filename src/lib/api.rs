@@ -3,8 +3,6 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewProcessReq {
-    pub input: String,
-    pub output: String,
     pub program: String
 }
 
