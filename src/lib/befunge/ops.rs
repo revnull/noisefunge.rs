@@ -41,6 +41,7 @@ impl OpSet {
         for i in 0..=5 { // A - F
             ops[i as usize + 65] = Some(push_int(10 + i));
         }
+        ops[104] = Some(make_op!(hex_byte)); // h
 
         ops[37] = Some(make_op!(r#mod)); // %
         ops[42] = Some(make_op!(mul)); // *
@@ -52,6 +53,8 @@ impl OpSet {
         ops[126] = Some(make_op!(receive)); // ~
         ops[38] = Some(make_op!(print_byte)); // &
         ops[44] = Some(make_op!(print_char)); // ,
+
+        ops[102] = Some(make_op!(fork)); // f
 
         OpSet(ops)
     }
@@ -80,6 +83,13 @@ fn push_int(i: u8) -> Op {
         proc.step()
     };
     make_op!(push_i)
+}
+
+fn hex_byte(proc: &mut Process) {
+    let msb = pop!(proc);
+    let lsb = pop!(proc);
+    proc.push((msb << 4) + lsb);
+    proc.step();
 }
 
 fn set_direction(dir: Dir) -> Op {
