@@ -196,8 +196,7 @@ impl Engine {
         log
     }
 
-    pub fn state(&self, prev: Option<u64>) -> EngineState {
-        println!("{}", self.beat);
+    pub fn state(&self) -> EngineState {
         EngineState { beat: self.beat }
     }
 

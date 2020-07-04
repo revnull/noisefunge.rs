@@ -45,8 +45,7 @@ impl<T> Responder<T> {
 #[derive(Debug)]
 pub enum FungeRequest {
     StartProcess(String, Responder<Result<u64,String>>),
-    GetProcess(u64, Responder<Option<Vec<u8>>>),
-    GetState(Option<u64>, Responder<EngineState>),
+    GetState(Option<u64>, Responder<Arc<Vec<u8>>>),
 }
 
 unsafe impl Send for FungeRequest {}
@@ -79,8 +78,7 @@ fn handle_GET(sender: Arc<Sender<FungeRequest>>,
         let responder = Responder::new();
         sender.send(FungeRequest::GetState(prev, responder.clone()));
         
-        let bytes = serde_json::to_vec(&responder.wait()).unwrap();
-        return resp.status(200).body(bytes)
+        return resp.status(200).body((*responder.wait()).clone())
                    .map_err(|e| Error::from(e));
     }
 

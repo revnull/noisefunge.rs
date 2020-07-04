@@ -8,6 +8,7 @@ use std::{thread, time};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use crossbeam_channel::select;
+use serde_json::{to_vec};
 
 use clap::{Arg, App};
 
@@ -28,7 +29,8 @@ fn handle_server_request(engine: &mut Engine, request: FungeRequest) {
                 Err(e) => Err(e.to_string())
             }),
         GetState(prev, rspndr) => {
-            rspndr.respond(engine.state(prev))
+            let bytes = Arc::new(to_vec(&engine.state()).unwrap());
+            rspndr.respond(bytes);
         },
         r => panic!("Failed to handle: {:?}", r),
     };
