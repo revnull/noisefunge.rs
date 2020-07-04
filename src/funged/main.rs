@@ -4,6 +4,7 @@ use noisefunge::server::*;
 use noisefunge::server::FungeRequest::*;
 use noisefunge::befunge::*;
 use noisefunge::config::*;
+use noisefunge::api::*;
 use std::{thread, time};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -24,9 +25,25 @@ fn read_args() -> String {
 struct FungedServer {
     config: FungedConfig,
     engine: Engine,
+    state: EngineState,
+    state_vec: Arc<Vec<u8>>,
+    waiting: Vec<(u64, Responder<Arc<Vec<u8>>>)>
 }
 
 impl FungedServer {
+
+    fn new(conf: FungedConfig) -> Self {
+        let engine = Engine::new();
+        let state = engine.state();
+        let state_vec = Arc::new(to_vec(&state).unwrap());
+        FungedServer {
+            config: conf,
+            engine: engine,
+            state: state,
+            state_vec: state_vec,
+            waiting: Vec::new()
+        }
+    }
 
     fn handle(&mut self, request: FungeRequest) {
         match request {
@@ -36,21 +53,37 @@ impl FungedServer {
                     Err(e) => Err(e.to_string())
                 }),
             GetState(prev, rspndr) => {
-                let bytes = Arc::new(to_vec(&self.engine.state()).unwrap());
-                rspndr.respond(bytes);
+                let prev = prev.unwrap_or(0);
+                if prev < self.state.beat {
+                    rspndr.respond(Arc::clone(&self.state_vec));
+                } else {
+                    self.waiting.push((prev, rspndr));
+                }
             },
             r => panic!("Failed to handle: {:?}", r),
         };
     }
 
+    fn update_state(&mut self) {
+        self.state = self.engine.state();
+        self.state_vec = Arc::new(to_vec(&self.state).unwrap());
+        let state_vec = &self.state_vec;
+        let beat = self.state.beat;
+        self.waiting.retain(|(prev, rspndr)|
+            if *prev <= beat {
+                rspndr.respond(Arc::clone(state_vec));
+                false
+            } else {
+                true
+            }
+        );
+    }
 }
 
 fn main() {
 
-    let mut server = FungedServer {
-        config: FungedConfig::read_config(&read_args()),
-        engine: Engine::new()
-    };
+    let mut server = FungedServer::new(
+        FungedConfig::read_config(&read_args()));
 
     let mut handle = JackHandle::new(&server.config);
     let http_serv = ServerHandle::new(&server.config);
@@ -68,10 +101,10 @@ fn main() {
                         };
                     }
                 };
+                server.update_state();
                 prev_i = i;
             },
             recv(http_serv.channel) -> msg => {
-                println!("Here: {:?}", msg);
                 match msg {
                     Ok(req) => server.handle(req),
                     Err(e) => println!("Unknown error: {:?}", e),

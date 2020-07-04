@@ -75,7 +75,9 @@ impl FungedConfig {
                              .expect(&format!("Could not parse section: {}",
                                               local));
             connections.extend_from_slice(&get_connections(&local, &table));
-            match table.get("starting").and_then(|v| v.clone().into_int().ok()) {
+            match table.get("starting").and_then(
+                |v| v.clone().into_int().ok()) {
+
                 Some(ch) => {
                     let end = table.get("ending")
                                    .and_then(|v| v.clone().into_int().ok())
