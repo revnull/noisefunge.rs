@@ -47,16 +47,12 @@ fn main() {
         select! {
             recv(handle.beat_channel) -> msg => {
                 let i = msg.expect("Failed to read from beat channel.");
-                println!("next_beat: {}", i);
-                let notes = eng.step();
-                for n in notes {
-                    println!("log: {:?}", n);
-                };
-                match i % 8 {
-                    0 => { handle.send_midi(MidiMsg::On(0, 70, 99));} ,
-                    5 => { handle.send_midi(MidiMsg::Off(0, 70)); } ,
-                    _ => {}
-                };
+                if i % conf.period == 0 {
+                    let notes = eng.step();
+                    for n in notes {
+                        println!("log: {:?}", n);
+                    };
+                }
             },
             recv(serv.channel) -> msg => {
                 println!("Here: {:?}", msg);

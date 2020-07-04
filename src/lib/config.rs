@@ -13,6 +13,7 @@ pub struct FungedConfig {
     pub host: String,
     pub port: u16,
     pub beat_source: Rc<str>,
+    pub period: u64,
     pub locals: HashSet<Rc<str>>,
     pub connections: Vec<(Rc<str>, String)>,
     pub channels: [Option<ChannelConfig>; 256]
@@ -54,12 +55,14 @@ impl FungedConfig {
 
         settings.set_default("host", "127.0.0.1").unwrap();
         settings.set_default("port", 1312).unwrap();
+        settings.set_default("period", 24).unwrap();
 
         settings.merge(config::File::with_name(&file)).unwrap();
         println!("{:?}", settings);
         let host = settings.get_str("host").unwrap();
         let port = settings.get_int("port").expect("Port not set") as u16;
         let bi = settings.get_str("beats_in").expect("Beats in not found.");
+        let period = settings.get_int("period").unwrap();
 
         let mut locals = HashSet::new();
         let mut channels = arr![None; 256];
@@ -107,6 +110,7 @@ impl FungedConfig {
         FungedConfig { host: host,
                        port: port,
                        beat_source: Rc::from(bi),
+                       period: period as u64,
                        locals: locals,
                        connections: connections,
                        channels: channels }
