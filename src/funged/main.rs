@@ -21,45 +21,59 @@ fn read_args() -> String {
     String::from(matches.value_of("CONFIG").unwrap())
 }
 
-fn handle_server_request(engine: &mut Engine, request: FungeRequest) {
-    match request {
-        StartProcess(prog, rspndr) =>
-            rspndr.respond(match Prog::parse(&prog) {
-                Ok(p) => Ok(engine.make_process(p)),
-                Err(e) => Err(e.to_string())
-            }),
-        GetState(prev, rspndr) => {
-            let bytes = Arc::new(to_vec(&engine.state()).unwrap());
-            rspndr.respond(bytes);
-        },
-        r => panic!("Failed to handle: {:?}", r),
-    };
+struct FungedServer {
+    config: FungedConfig,
+    engine: Engine,
+}
+
+impl FungedServer {
+
+    fn handle(&mut self, request: FungeRequest) {
+        match request {
+            StartProcess(prog, rspndr) =>
+                rspndr.respond(match Prog::parse(&prog) {
+                    Ok(p) => Ok(self.engine.make_process(p)),
+                    Err(e) => Err(e.to_string())
+                }),
+            GetState(prev, rspndr) => {
+                let bytes = Arc::new(to_vec(&self.engine.state()).unwrap());
+                rspndr.respond(bytes);
+            },
+            r => panic!("Failed to handle: {:?}", r),
+        };
+    }
+
 }
 
 fn main() {
 
-    let conf = FungedConfig::read_config(&read_args());
+    let mut server = FungedServer {
+        config: FungedConfig::read_config(&read_args()),
+        engine: Engine::new()
+    };
 
-    let mut handle = JackHandle::new(&conf);
-
-    let serv = ServerHandle::new(&conf);
-    let mut eng = Engine::new();
+    let mut handle = JackHandle::new(&server.config);
+    let http_serv = ServerHandle::new(&server.config);
+    let mut prev_i = 0;
 
     loop {
         select! {
             recv(handle.beat_channel) -> msg => {
                 let i = msg.expect("Failed to read from beat channel.");
-                if i % conf.period == 0 {
-                    let notes = eng.step();
-                    for n in notes {
-                        println!("log: {:?}", n);
-                    };
-                }
+                for j in prev_i..i {
+                    if i % server.config.period == 0 {
+                        let log = server.engine.step();
+                        for n in log {
+                            println!("log: {:?}", n);
+                        };
+                    }
+                };
+                prev_i = i;
             },
-            recv(serv.channel) -> msg => {
+            recv(http_serv.channel) -> msg => {
                 println!("Here: {:?}", msg);
                 match msg {
-                    Ok(req) => handle_server_request(&mut eng, req),
+                    Ok(req) => server.handle(req),
                     Err(e) => println!("Unknown error: {:?}", e),
                 };
             }
