@@ -8,6 +8,7 @@ use serde_json::{from_str, to_vec};
 
 use crate::config::{FungedConfig};
 use crate::api::*;
+use querystring::querify;
 
 #[derive(Debug,Clone)]
 pub struct Responder<T>(Arc<(Mutex<Option<T>>, Condvar)>);
@@ -45,6 +46,7 @@ impl<T> Responder<T> {
 pub enum FungeRequest {
     StartProcess(String, Responder<Result<u64,String>>),
     GetProcess(u64, Responder<Option<Vec<u8>>>),
+    GetState(Option<u64>, Responder<EngineState>),
 }
 
 unsafe impl Send for FungeRequest {}
@@ -64,6 +66,22 @@ fn handle_GET(sender: Arc<Sender<FungeRequest>>,
         return resp.status(200)
                    .body(Vec::from("Hello, world"))
                    .map_err(|e| Error::from(e))
+    } else if uri.path() == "/state" {
+        let prev = uri.query()
+            .and_then(|qs| {
+                for (k,v) in querify(qs) {
+                    if k == "prev" {
+                        return v.parse::<u64>().ok();
+                    }
+                };
+                return None;
+            });
+        let responder = Responder::new();
+        sender.send(FungeRequest::GetState(prev, responder.clone()));
+        
+        let bytes = serde_json::to_vec(&responder.wait()).unwrap();
+        return resp.status(200).body(bytes)
+                   .map_err(|e| Error::from(e));
     }
 
     println!("{}", uri.path());

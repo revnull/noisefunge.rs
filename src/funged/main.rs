@@ -27,6 +27,9 @@ fn handle_server_request(engine: &mut Engine, request: FungeRequest) {
                 Ok(p) => Ok(engine.make_process(p)),
                 Err(e) => Err(e.to_string())
             }),
+        GetState(prev, rspndr) => {
+            rspndr.respond(engine.state(prev))
+        },
         r => panic!("Failed to handle: {:?}", r),
     };
 }

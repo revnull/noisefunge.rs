@@ -110,6 +110,7 @@ fn main() {
     'outer: while !done {
         window.color_set(0);
         window.clear();
+        window.mvaddstr(maxy - 1, 0, format!("{}", server_state.beat));
         window.mvaddstr(1,1,format!("{} - {}", miny, minx));
         window.mvaddstr(2,2,format!("{} - {}", maxy, maxx));
         let elen = errs.len();

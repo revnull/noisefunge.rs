@@ -9,7 +9,7 @@ pub struct NewProcessReq {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewProcessResp { pub pid: u64 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EngineState {
     pub beat: u64,
 }

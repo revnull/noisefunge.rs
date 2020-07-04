@@ -3,6 +3,7 @@ mod process;
 mod ops;
 pub use self::process::*;
 pub use self::ops::*;
+use crate::api::EngineState;
 
 use arr_macro::arr;
 use std::collections::BTreeMap;
@@ -19,13 +20,14 @@ enum MessageQueue {
 }
 
 pub struct Engine {
+    beat: u64,
     next_pid: u64,
     progs: HashSet<Rc<Prog>>,
     procs: BTreeMap<u64,Process>,
     buffers: [MessageQueue; 256],
     active: Vec<u64>,
     sleeping: Vec<(u64, u8)>,
-    ops: OpSet
+    ops: OpSet,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,7 +41,8 @@ pub enum EventLog {
 
 impl Engine {
     pub fn new() -> Engine {
-        Engine { next_pid: 1,
+        Engine { beat: 0,
+                 next_pid: 1,
                  progs: HashSet::new(),
                  procs: BTreeMap::new(),
                  buffers: arr![MessageQueue::Empty; 256],
@@ -189,7 +192,13 @@ impl Engine {
         };
 
         self.active = new_active;
+        self.beat += 1;
         log
+    }
+
+    pub fn state(&self, prev: Option<u64>) -> EngineState {
+        println!("{}", self.beat);
+        EngineState { beat: self.beat }
     }
 
 }
