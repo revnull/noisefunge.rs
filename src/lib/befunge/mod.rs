@@ -4,12 +4,11 @@ mod ops;
 mod charmap;
 pub use self::process::*;
 pub use self::ops::*;
+pub use self::charmap::*;
 use crate::api::EngineState;
 
 use arr_macro::arr;
-use std::collections::BTreeMap;
-use std::collections::HashSet;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashSet, HashMap, VecDeque};
 use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
@@ -29,6 +28,7 @@ pub struct Engine {
     active: Vec<u64>,
     sleeping: Vec<(u64, u8)>,
     ops: OpSet,
+    charmap: CharMap,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,7 +49,8 @@ impl Engine {
                  buffers: arr![MessageQueue::Empty; 256],
                  active: Vec::new(),
                  sleeping: Vec::new(),
-                 ops: OpSet::new() }
+                 ops: OpSet::new(),
+                 charmap: CharMap::default() }
     }
 
     fn new_pid(&mut self) -> u64 {
@@ -198,7 +199,24 @@ impl Engine {
     }
 
     pub fn state(&self) -> EngineState {
-        EngineState { beat: self.beat }
+        let mut progs = Vec::new();
+        let mut prog_map : HashMap<Rc<Prog>, usize> = HashMap::new();
+
+        for (pid, proc) in &self.procs {
+            let top = match proc.top() {
+                None => continue,
+                Some(top) => top
+            };
+            let mem = Rc::clone(&top.memory);
+            let prog_index = prog_map.entry(mem).or_insert_with(|| {
+                progs.push(top.memory.state_tuple(&self.charmap));
+                progs.len()
+            });
+        }
+
+        EngineState { beat: self.beat,
+                      progs: progs
+                    }
     }
 
 }

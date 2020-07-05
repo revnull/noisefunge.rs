@@ -2,6 +2,7 @@
 use std::cmp::max;
 use std::rc::Rc;
 use serde::{Serialize, Deserialize};
+use super::charmap::CharMap;
 
 #[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum Dir { U, D, L, R }
@@ -59,6 +60,14 @@ impl Prog {
     pub fn lookup(&self, pc : PC) -> u8 {
         let PC(i) = pc;
         self.data[i as usize]
+    }
+
+    pub fn state_tuple(&self, cm: &CharMap) -> (usize, String) {
+        let mut res = String::new();
+        for c in &self.data {
+            res.push(cm[*c]);
+        }
+        (self.width, res)
     }
 }
 
