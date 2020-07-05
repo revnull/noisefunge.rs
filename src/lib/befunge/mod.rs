@@ -1,6 +1,7 @@
 
 mod process;
 mod ops;
+mod charmap;
 pub use self::process::*;
 pub use self::ops::*;
 use crate::api::EngineState;
