@@ -94,7 +94,7 @@ fn main() {
             recv(handle.beat_channel) -> msg => {
                 let i = msg.expect("Failed to read from beat channel.");
                 for j in prev_i..i {
-                    if i % server.config.period == 0 {
+                    if j % server.config.period == 0 {
                         let log = server.engine.step();
                         for n in log {
                             println!("log: {:?}", n);

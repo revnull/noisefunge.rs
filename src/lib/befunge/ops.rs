@@ -66,7 +66,7 @@ impl OpSet {
             Some(c) => c
         };
         match &ops[c as usize] {
-            None => return,
+            None => { proc.die("Unknown op"); }
             Some(op) => proc.apply(op)
         }
     }

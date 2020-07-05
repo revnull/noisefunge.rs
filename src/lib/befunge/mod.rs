@@ -95,7 +95,7 @@ impl Engine {
 
         for pid in self.active.iter() {
             let proc = match self.procs.get_mut(pid) {
-                None => continue,
+                None => panic!("Lost proc {}", pid),
                 Some(p) => p
             };
             self.ops.apply_to(proc);
@@ -110,6 +110,7 @@ impl Engine {
                     new_active.push(proc.pid);
                     new_active.push(p2.pid);
                     log.push(EventLog::NewProcess(p2.pid));
+                    self.procs.insert(pid, p2);
                 },
                 ProcessState::Trap(Syscall::Sleep(c)) => {
                     if c == 0 {

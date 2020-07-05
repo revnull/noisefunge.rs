@@ -212,7 +212,7 @@ impl Process {
                             self.die("Exited off bottom edge");
                             return;
                         }
-                        top.pc = PC(i - w);
+                        top.pc = PC(i + w);
                     },
                 }
             }
