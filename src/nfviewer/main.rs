@@ -3,7 +3,8 @@ use noisefunge::api::*;
 use noisefunge::config::*;
 use clap::{Arg, App};
 use pancurses::{initscr, cbreak, noecho, endwin, Input, has_colors,
-                start_color, init_pair, curs_set};
+                start_color, init_pair, curs_set, Window};
+use std::collections::HashSet;
 use std::time::Duration;
 use std::thread;
 use std::sync::{Arc, Mutex, Condvar};
@@ -37,7 +38,7 @@ fn start_request_thread(baseuri: &str) -> Handle {
     thread::spawn(move || {
         let lock = &arc.0;
         let cond = &arc.1;
-        let prev = 0;
+        let mut prev = 0;
         let mut delay = false;
         let client = Client::builder().user_agent("nfviewer")
                                       .build()
@@ -59,6 +60,7 @@ fn start_request_thread(baseuri: &str) -> Handle {
                     if response.status().is_success() {
                         response.json().map_err(|e|
                             format!("Serialization error: {:?}", e))
+                            .map(|s: EngineState| { prev = s.beat; s })
                     } else {
                         delay = true;
                         Err(format!("Bad status code: {:?}",
@@ -82,11 +84,106 @@ fn start_request_thread(baseuri: &str) -> Handle {
     return arc2;
 }
 
+struct Tile {
+    width: i32,
+    pid: Option<u64>
+}
+
+struct TileRow {
+    height: i32,
+    tiles: Vec<Tile>
+}
+
+struct Tiler {
+    rows: Vec<TileRow>,
+    state: EngineState,
+    active: HashSet<u64>,
+    errors: String,
+    needs_redraw: bool,
+}
+
+impl Tiler {
+    fn new() -> Self {
+        Tiler {
+            rows: Vec::new(),
+            state: EngineState::new(),
+            active: HashSet::new(),
+            errors: String::new(),
+            needs_redraw: true
+        }
+    }
+
+    fn update_state(&mut self, state: EngineState) {
+        self.state = state;
+        self.needs_redraw = true;
+    }
+
+    fn draw(&mut self, window: &Window) {
+        if !self.needs_redraw {
+            return;
+        }
+
+        let (mut y, minx) = window.get_beg_yx();
+        let (maxy, maxx) = window.get_max_yx();
+
+        let unused = self.state.procs.keys()
+                                     .filter(|k| !self.active.contains(k));
+        
+        let mut new_rows = Vec::new();
+
+        for row in &self.rows {
+            let h = row.height;
+            let mut new_tiles = Vec::new();
+            let mut x = minx;
+
+            if !new_tiles.is_empty() {
+                new_rows.push(TileRow { height: row.height,
+                                        tiles: new_tiles });
+                y += h;
+            }
+
+        }
+
+        self.rows = new_rows;
+
+        // Clear and print beat.
+        window.color_set(0);
+        window.clear();
+        window.mvaddstr(maxy - 1, 0, format!("{}", self.state.beat));
+
+        // Error bar
+        let elen = self.errors.len();
+        if elen < maxx as usize {
+            for _ in 0..maxx as usize - elen {
+                self.errors.push(' ');
+            }
+        } else if elen > maxx as usize {
+            self.errors = String::from(&self.errors[elen-maxx as usize..elen]);
+        }
+        window.mv(maxy - 2, 0);
+        window.color_set(1);
+        window.mvaddstr(maxy - 2, 0, self.errors.clone());
+        window.refresh();
+        self.needs_redraw = false;
+    }
+
+    fn retile(&mut self) {
+        self.rows = Vec::new();
+        self.active = HashSet::new();
+        self.errors = String::new();
+        self.needs_redraw = true;
+    }
+
+    fn push_error(&mut self, err: &str) {
+        self.errors.push_str("   ");
+        self.errors.push_str(&err);
+        self.needs_redraw = true;
+    }
+}
+
 fn main() {
 
     let baseuri = read_args();
-
-    println!("baseuri: {}", baseuri);
 
     let window = initscr();
     cbreak();
@@ -95,45 +192,22 @@ fn main() {
     if has_colors() {
         start_color();
         init_pair(1, pancurses::COLOR_WHITE, pancurses::COLOR_RED);
+        init_pair(2, pancurses::COLOR_WHITE, pancurses::COLOR_BLUE);
     }
     window.nodelay(true);
-    let (mut miny, mut minx) = window.get_beg_yx();
-    let (mut maxy, mut maxx) = window.get_max_yx();
     let mut done = false;
-    let mut retile = true;
 
     let handle = start_request_thread(&baseuri);
-    let sleep_dur = Duration::from_millis(10);
-    let mut server_state = EngineState::new();
-    let mut errs = String::new();
+    let sleep_dur = Duration::from_millis(1000);
+    let mut tiler = Tiler::new();
 
     'outer: while !done {
-        window.color_set(0);
-        window.clear();
-        window.mvaddstr(maxy - 1, 0, format!("{}", server_state.beat));
-        window.mvaddstr(1,1,format!("{} - {}", miny, minx));
-        window.mvaddstr(2,2,format!("{} - {}", maxy, maxx));
-        let elen = errs.len();
-        if elen < maxx as usize {
-            for _ in 0..maxx as usize - elen {
-                errs.push(' ');
-            }
-        } else if elen > maxx as usize {
-            errs = String::from(&errs[elen-maxx as usize..elen]);
-        }
-        window.mv(maxy - 2, 0);
-        window.color_set(1);
-        window.mvaddstr(maxy - 2, 0, errs.clone());
-        window.refresh();
+        tiler.draw(&window);
         loop {
             match window.getch() {
                 None => break,
                 Some(Input::KeyResize) => {
-                    miny = window.get_beg_y();
-                    minx = window.get_beg_x();
-                    maxy = window.get_max_y();
-                    maxx = window.get_max_x();
-                    retile = true;
+                    tiler.retile();
                     continue 'outer;
                 }
                 Some(i) => window.mvaddstr(3,3,format!("{:?}", i)),
@@ -150,17 +224,13 @@ fn main() {
             }
             if val.is_some() {
                 match val.take().unwrap() {
-                    Ok(st) => server_state = st,
-                    Err(s) => {
-                        errs.push_str("   ");
-                        errs.push_str(&s);
-                    }
+                    Ok(st) => tiler.update_state(st),
+                    Err(s) => tiler.push_error(&s),
                 }
                 cond.notify_one();
             }
         }
 
-        if !done { thread::sleep(Duration::from_millis(100)) };
     }
 
     endwin();

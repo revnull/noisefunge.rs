@@ -5,7 +5,7 @@ mod charmap;
 pub use self::process::*;
 pub use self::ops::*;
 pub use self::charmap::*;
-use crate::api::EngineState;
+use crate::api::{EngineState, ProcState};
 
 use arr_macro::arr;
 use std::collections::{BTreeMap, HashSet, HashMap, VecDeque};
@@ -202,6 +202,7 @@ impl Engine {
     pub fn state(&self) -> EngineState {
         let mut progs = Vec::new();
         let mut prog_map : HashMap<Rc<Prog>, usize> = HashMap::new();
+        let mut procs = HashMap:: new();
 
         for (pid, proc) in &self.procs {
             let top = match proc.top() {
@@ -213,10 +214,15 @@ impl Engine {
                 progs.push(top.memory.state_tuple(&self.charmap));
                 progs.len()
             });
+
+            let PC(pc) = top.pc;
+            procs.insert(*pid, ProcState { prog: *prog_index,
+                                           pc: pc });
         }
 
         EngineState { beat: self.beat,
-                      progs: progs
+                      progs: progs,
+                      procs: procs
                     }
     }
 

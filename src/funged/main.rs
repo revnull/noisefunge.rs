@@ -70,7 +70,7 @@ impl FungedServer {
         let state_vec = &self.state_vec;
         let beat = self.state.beat;
         self.waiting.retain(|(prev, rspndr)|
-            if *prev <= beat {
+            if *prev < beat {
                 rspndr.respond(Arc::clone(state_vec));
                 false
             } else {
