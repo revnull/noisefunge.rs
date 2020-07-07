@@ -120,19 +120,19 @@ impl Tiler {
 
     fn try_draw_process(&self, window: &Window, x: usize, mut y: usize,
                         max_width: usize, max_height: usize,
-                        pid: u64) -> bool {
+                        pid: u64) -> Option<(usize, Tile)> {
 
         let proc = match self.state.procs.get(&pid) {
             Some(x) => x,
-            None => return false
+            None => return None
         };
 
         let (width, text) = &self.state.progs[proc.prog];
 
-        let height = (text.len() / width) + 1;
+        let height = (text.chars().count() / width) + 1;
 
         if *width > max_width || height > max_height {
-            return false;
+            return None;
         }
 
         for (i, ch) in text.chars().enumerate() {
@@ -155,7 +155,7 @@ impl Tiler {
             }
         }
 
-        true
+        Some((height, Tile { width: *width, pid: pid }))
     }
 
     fn draw(&mut self, window: &Window) {
@@ -186,7 +186,8 @@ impl Tiler {
         window.color_set(0);
 
         let mut unused = self.state.procs.keys()
-                                         .filter(|k| !self.active.contains(k));
+                                         .filter(|k| !self.active.contains(k))
+                                         .take(20);
         
         let mut new_rows = Vec::new();
         let mut new_active = HashSet::new();
@@ -201,12 +202,13 @@ impl Tiler {
             if let Some(row) = old_rows.next() {
                 let mut new_tiles = Vec::new();
                 for tile in &row.tiles {
-                    if self.try_draw_process(window, x as usize, y as usize,
+                    if let Some((_height, t)) =
+                        self.try_draw_process(window, x as usize, y as usize,
                                              tile.width, row.height,
                                              tile.pid) {
-                        x += tile.width as i32;
-                        new_tiles.push(Tile { width: tile.width,
-                                              pid: tile.pid });
+                        x += t.width as i32;
+                        new_tiles.push(t);
+                        new_active.insert(tile.pid);
                     }
                 }
 
@@ -220,10 +222,14 @@ impl Tiler {
             }
             
             if let Some(pid) = unused.next() {
-                if self.try_draw_process(window, x as usize, y as usize,
-                                         (maxx - x) as usize, 
-                                         (maxy - y) as usize, *pid) {
-                    
+                if let Some((height, t)) =
+                    self.try_draw_process(window, x as usize, y as usize,
+                                          (maxx - x) as usize, 
+                                          (maxy - y) as usize, *pid) {
+                    new_rows.push(TileRow { height: height,
+                                            tiles: vec![t] });
+                    new_active.insert(*pid);
+                    y += height as i32;
                 }
 
                 continue 'outer;
