@@ -93,6 +93,7 @@ impl Engine {
         }
         self.sleeping = new_sleeping;
 
+        let mut dead = Vec::new();
         for pid in self.active.iter() {
             let proc = match self.procs.get_mut(pid) {
                 None => panic!("Lost proc {}", pid),
@@ -110,7 +111,7 @@ impl Engine {
                     new_active.push(proc.pid);
                     new_active.push(p2.pid);
                     log.push(EventLog::NewProcess(p2.pid));
-                    self.procs.insert(pid, p2);
+                    self.procs.insert(p2.pid, p2);
                 },
                 ProcessState::Trap(Syscall::Sleep(c)) => {
                     if c == 0 {
@@ -186,13 +187,19 @@ impl Engine {
                 }
                 ProcessState::Finished => {
                     log.push(EventLog::Finished(proc.pid));
+                    dead.push(proc.pid);
                 },
                 ProcessState::Crashed(msg) => {
                     log.push(EventLog::Crashed(proc.pid, msg));
+                    dead.push(proc.pid);
                 }
                 s => panic!("Unhandled state: {:?}", s),
             }
         };
+
+        for pid in dead {
+            self.procs.remove(&pid);
+        }
 
         self.active = new_active;
         self.beat += 1;

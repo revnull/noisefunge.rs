@@ -128,10 +128,11 @@ impl Tiler {
         };
 
         let (width, text) = &self.state.progs[proc.prog];
+        let display_width = *width + 1;
 
         let height = (text.chars().count() / width) + 1;
 
-        if *width > max_width || height > max_height {
+        if display_width > max_width || height > max_height {
             return None;
         }
 
@@ -155,7 +156,7 @@ impl Tiler {
             }
         }
 
-        Some((height, Tile { width: *width, pid: pid }))
+        Some((height, Tile { width: display_width, pid: pid }))
     }
 
     fn draw(&mut self, window: &Window) {
@@ -209,6 +210,21 @@ impl Tiler {
                         x += t.width as i32;
                         new_tiles.push(t);
                         new_active.insert(tile.pid);
+                    }
+                }
+
+                'append: while x < maxx {
+                    if let Some((_height, t)) = unused.next()
+                        .and_then(|pid|
+                            self.try_draw_process(window, x as usize,
+                                                  y as usize,
+                                                  (maxx - x) as usize, 
+                                                  (maxy - y) as usize, *pid)) {
+                        x += t.width as i32;
+                        new_active.insert(t.pid);
+                        new_tiles.push(t);
+                    } else {
+                        break 'append;
                     }
                 }
 

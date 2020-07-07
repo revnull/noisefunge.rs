@@ -55,6 +55,7 @@ impl OpSet {
         ops[44] = Some(make_op!(print_char)); // ,
 
         ops[102] = Some(make_op!(fork)); // f
+        ops[115] = Some(make_op!(sleep)); // s
 
         OpSet(ops)
     }
