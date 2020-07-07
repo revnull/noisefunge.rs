@@ -86,7 +86,7 @@ impl Engine {
         for &(pid, c) in self.sleeping.iter() {
             if c == 0 {
                 self.procs.get_mut(&pid).map(|p| p.resume(None));
-                self.active.push(pid);
+                new_active.push(pid);
             } else {
                 new_sleeping.push((pid, c - 1));
             }
