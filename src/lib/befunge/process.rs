@@ -117,6 +117,13 @@ impl Process {
                   state : ProcessState::Running(false) }
     }
 
+    pub fn is_running(&self) -> bool {
+        match self.state {
+            ProcessState::Running(_) => true,
+            _ => false
+        }
+    }
+
     pub fn state(&self) -> ProcessState {
         self.state
     }

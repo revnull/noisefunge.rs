@@ -212,12 +212,13 @@ impl Engine {
             let mem = Rc::clone(&top.memory);
             let prog_index = prog_map.entry(mem).or_insert_with(|| {
                 progs.push(top.memory.state_tuple(&self.charmap));
-                progs.len()
+                progs.len() - 1
             });
 
             let PC(pc) = top.pc;
             procs.insert(*pid, ProcState { prog: *prog_index,
-                                           pc: pc });
+                                           pc: pc,
+                                           active: proc.is_running()});
         }
 
         EngineState { beat: self.beat,

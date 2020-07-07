@@ -14,6 +14,7 @@ pub struct NewProcessResp { pub pid: u64 }
 pub struct ProcState {
     pub prog: usize,
     pub pc: usize,
+    pub active: bool
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

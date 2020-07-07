@@ -85,12 +85,12 @@ fn start_request_thread(baseuri: &str) -> Handle {
 }
 
 struct Tile {
-    width: i32,
-    pid: Option<u64>
+    width: usize,
+    pid: u64
 }
 
 struct TileRow {
-    height: i32,
+    height: usize,
     tiles: Vec<Tile>
 }
 
@@ -118,6 +118,44 @@ impl Tiler {
         self.needs_redraw = true;
     }
 
+    fn try_draw_process(&self, window: &Window, x: usize, mut y: usize,
+                        max_width: usize, max_height: usize,
+                        pid: u64) -> bool {
+
+        let proc = match self.state.procs.get(&pid) {
+            Some(x) => x,
+            None => return false
+        };
+
+        let (width, text) = &self.state.progs[proc.prog];
+
+        let height = (text.len() / width) + 1;
+
+        if *width > max_width || height > max_height {
+            return false;
+        }
+
+        for (i, ch) in text.chars().enumerate() {
+            if i % width == 0 {
+                window.mv(y as i32,x as i32);
+                y += 1;
+            }
+            if i == proc.pc {
+                if proc.active {
+                    window.color_set(3);
+                } else {
+                    window.color_set(4);
+                }
+                window.addch(ch);
+                window.color_set(0);
+            } else {
+                window.addch(ch);
+            }
+        }
+
+        true
+    }
+
     fn draw(&mut self, window: &Window) {
         if !self.needs_redraw {
             return;
@@ -126,29 +164,9 @@ impl Tiler {
         let (mut y, minx) = window.get_beg_yx();
         let (maxy, maxx) = window.get_max_yx();
 
-        let unused = self.state.procs.keys()
-                                     .filter(|k| !self.active.contains(k));
-        
-        let mut new_rows = Vec::new();
-
-        for row in &self.rows {
-            let h = row.height;
-            let mut new_tiles = Vec::new();
-            let mut x = minx;
-
-            if !new_tiles.is_empty() {
-                new_rows.push(TileRow { height: row.height,
-                                        tiles: new_tiles });
-                y += h;
-            }
-
-        }
-
-        self.rows = new_rows;
-
         // Clear and print beat.
-        window.color_set(0);
         window.clear();
+        window.color_set(0);
         window.mvaddstr(maxy - 1, 0, format!("{}", self.state.beat));
 
         // Error bar
@@ -163,6 +181,58 @@ impl Tiler {
         window.mv(maxy - 2, 0);
         window.color_set(1);
         window.mvaddstr(maxy - 2, 0, self.errors.clone());
+
+        let mut unused = self.state.procs.keys()
+                                         .filter(|k| !self.active.contains(k));
+        
+        let mut new_rows = Vec::new();
+        let mut new_active = HashSet::new();
+
+        let mut old_rows = self.rows.iter();
+
+        let maxy = maxy - 2;
+
+        'outer: while y < maxy {
+            let mut x = minx;
+
+            if let Some(row) = old_rows.next() {
+                let mut new_tiles = Vec::new();
+                for tile in &row.tiles {
+                    if self.try_draw_process(window, x as usize, y as usize,
+                                             tile.width, row.height,
+                                             tile.pid) {
+                        x += tile.width as i32;
+                        new_tiles.push(Tile { width: tile.width,
+                                              pid: tile.pid });
+                    }
+                }
+
+                if !new_tiles.is_empty() {
+                    new_rows.push(TileRow { height: row.height,
+                                            tiles: new_tiles });
+                    
+                    y += row.height as i32;
+                }
+                continue 'outer;
+            }
+            
+            if let Some(pid) = unused.next() {
+                if self.try_draw_process(window, x as usize, y as usize,
+                                         (maxx - x) as usize, 
+                                         (maxy - y) as usize, *pid) {
+                    
+                }
+
+                continue 'outer;
+            } else {
+                break 'outer;
+            }
+
+        }
+
+        self.rows = new_rows;
+        self.active = new_active;
+
         window.refresh();
         self.needs_redraw = false;
     }
@@ -193,6 +263,8 @@ fn main() {
         start_color();
         init_pair(1, pancurses::COLOR_WHITE, pancurses::COLOR_RED);
         init_pair(2, pancurses::COLOR_WHITE, pancurses::COLOR_BLUE);
+        init_pair(3, pancurses::COLOR_WHITE, pancurses::COLOR_GREEN);
+        init_pair(4, pancurses::COLOR_WHITE, pancurses::COLOR_YELLOW);
     }
     window.nodelay(true);
     let mut done = false;
