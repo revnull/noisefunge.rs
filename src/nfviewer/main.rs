@@ -156,6 +156,10 @@ impl Tiler {
             }
         }
 
+        window.color_set(2);
+        window.mvaddstr((y - 1) as i32, x as i32, format!("{:X}", pid));
+        window.color_set(0);
+
         Some((height, Tile { width: display_width, pid: pid }))
     }
 
