@@ -136,6 +136,8 @@ impl Tiler {
         }
 
         for (i, ch) in text.chars().enumerate() {
+            let mut s = String::new();
+            s.push(ch);
             if i % width == 0 {
                 window.mv(y as i32,x as i32);
                 y += 1;
@@ -146,10 +148,10 @@ impl Tiler {
                 } else {
                     window.color_set(4);
                 }
-                window.addch(ch);
+                window.addstr(s);
                 window.color_set(0);
             } else {
-                window.addch(ch);
+                window.addstr(s);
             }
         }
 
@@ -181,6 +183,7 @@ impl Tiler {
         window.mv(maxy - 2, 0);
         window.color_set(1);
         window.mvaddstr(maxy - 2, 0, self.errors.clone());
+        window.color_set(0);
 
         let mut unused = self.state.procs.keys()
                                          .filter(|k| !self.active.contains(k));
