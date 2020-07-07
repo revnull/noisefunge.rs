@@ -219,7 +219,7 @@ impl Tiler {
                             self.try_draw_process(window, x as usize,
                                                   y as usize,
                                                   (maxx - x) as usize, 
-                                                  (maxy - y) as usize, *pid)) {
+                                                  row.height, *pid)) {
                         x += t.width as i32;
                         new_active.insert(t.pid);
                         new_tiles.push(t);
