@@ -1,6 +1,9 @@
 
-use simple_server::*;
+use rouille::{Request, Response, router, try_or_400};
+use rouille::input;
 use std::thread;
+use std::error;
+use std::fmt;
 use std::sync::{Arc, Mutex, Condvar};
 use crossbeam_channel::{bounded, Sender, Receiver};
 use http::uri::Parts;
@@ -55,100 +58,45 @@ pub struct ServerHandle {
     pub channel: Receiver<FungeRequest>
 }
 
-fn handle_GET(sender: Arc<Sender<FungeRequest>>,
-              req: Request<Vec<u8>>, mut resp: ResponseBuilder)
-              -> ResponseResult {
-
-    let uri = req.uri();
-
-    if uri.path() == "/" {
-        return resp.status(200)
-                   .body(Vec::from("Hello, world"))
-                   .map_err(|e| Error::from(e))
-    } else if uri.path() == "/state" {
-        let prev = uri.query()
-            .and_then(|qs| {
-                for (k,v) in querify(qs) {
-                    if k == "prev" {
-                        return v.parse::<u64>().ok();
-                    }
-                };
-                return None;
-            });
-        let responder = Responder::new();
-        sender.send(FungeRequest::GetState(prev, responder.clone()));
-        
-        return resp.status(200).body((*responder.wait()).clone())
-                   .map_err(|e| Error::from(e));
-    }
-
-    println!("{}", uri.path());
-    println!("{:?}", uri.query());
-
-    resp.status(404).body(Vec::new()).map_err(|e| Error::from(e))
-}
-
-fn new_process(sender: Arc<Sender<FungeRequest>>, body: Vec<u8>)
-    -> Result<Vec<u8>, String> {
-
-    let body = String::from_utf8(body).map_err(|e| format!("{}", e))?;
-    let req: NewProcessReq =
-        serde_json::from_str(&body).map_err(|e| format!("{}", e))?;
+fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
+    let data = try_or_400!(rouille::input::plain_text_body(&request));
 
     let responder = Responder::new();
-    let msg = FungeRequest::StartProcess(req.program, responder.clone());
-    sender.send(msg);
+    sender.send(FungeRequest::StartProcess(data, responder.clone()));
 
-    let resp = NewProcessResp { pid: responder.wait()? };
-    serde_json::to_vec(&resp).map_err(|e| format!("{}", e))
+    Response::json(&NewProcessResp { pid: responder.wait().unwrap() })
 }
 
-fn handle_POST(sender: Arc<Sender<FungeRequest>>,
-               req: Request<Vec<u8>>, mut resp: ResponseBuilder)
-               -> ResponseResult {
+fn get_state(sender: &Sender<FungeRequest>, request: &Request) -> Response {
+    let prev = request.get_param("prev")
+                      .and_then(|p| p.parse::<u64>().ok());
 
-    let uri = req.uri();
+    let responder = Responder::new();
+    sender.send(FungeRequest::GetState(prev, responder.clone()));
 
-    if uri.path() == "/process" {
-        match new_process(sender, req.into_body()) {
-            Ok(bytes) => {
-                return resp.status(200).body(bytes)
-                           .map_err(|e| Error::from(e));
-                },
-            Err(s) => {
-                return resp.status(400).body(s.into_bytes())
-                           .map_err(|e| Error::from(e));
-            }
-        }
-    }
-
-    resp.status(404).body(Vec::new()).map_err(|e| Error::from(e))
+    Response::from_data("application/json; charset=utf-8", 
+                        (*responder.wait()).clone())
 }
 
-fn handle_request(sender: Arc<Sender<FungeRequest>>, req: Request<Vec<u8>>,
-                  mut resp: ResponseBuilder) -> ResponseResult {
+fn handle_request(sender: &Sender<FungeRequest>, request: &Request)
+    -> Response {
+    router!(request,
+        (GET) (/state) => { get_state(sender, request) },
+        (POST) (/process) => { new_process(sender, request) },
 
-    match *req.method() {
-        Method::GET => handle_GET(sender, req, resp),
-        Method::POST => handle_POST(sender, req, resp),
-        _ => resp.status(501).body(Vec::new()).map_err(|e| Error::from(e))
-    }
+        _ => Response::empty_404()
+    )
 }
 
 impl ServerHandle {
 
     pub fn new(conf: &FungedConfig) -> ServerHandle {
         let (snd, rcv) = bounded(4);
-        let snd = Arc::new(snd);
-        let mut server = Server::new(move |request, mut response| {
-            handle_request(Arc::clone(&snd), request, response)
-        });
-        server.dont_serve_static_files();
 
-        let host = format!("{}", conf.host);
-        let port = format!("{}", conf.port);
+        let host = format!("{}:{}", conf.host, conf.port);
         let handle = thread::spawn(move || {
-            server.listen(&host, &port);
+            rouille::start_server(host, move |request|
+                handle_request(&snd.clone(), request));
         });
 
         ServerHandle { thread: handle,
