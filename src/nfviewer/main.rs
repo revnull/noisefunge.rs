@@ -86,7 +86,8 @@ fn start_request_thread(baseuri: &str) -> Handle {
 
 struct Tile {
     width: usize,
-    pid: u64
+    pid: u64,
+    last_pc: Option<usize>
 }
 
 struct TileRow {
@@ -120,7 +121,8 @@ impl Tiler {
 
     fn try_draw_process(&self, window: &Window, x: usize, mut y: usize,
                         max_width: usize, max_height: usize,
-                        pid: u64) -> Option<(usize, Tile)> {
+                        pid: u64, last_pc: Option<usize>)
+                        -> Option<(usize, Tile)> {
 
         let proc = match self.state.procs.get(&pid) {
             Some(x) => x,
@@ -143,12 +145,16 @@ impl Tiler {
                 window.mv(y as i32,x as i32);
                 y += 1;
             }
-            if i == proc.pc {
-                if proc.active {
-                    window.color_set(3);
-                } else {
-                    window.color_set(4);
-                }
+            if !proc.active && i == proc.pc {
+                window.color_set(5);
+                window.addstr(s);
+                window.color_set(0);
+            } else if Some(i) == last_pc {
+                window.color_set(4);
+                window.addstr(s);
+                window.color_set(0);
+            } else if i == proc.pc {
+                window.color_set(3);
                 window.addstr(s);
                 window.color_set(0);
             } else {
@@ -160,7 +166,9 @@ impl Tiler {
         window.mvaddstr((y - 1) as i32, x as i32, format!("{:X}", pid));
         window.color_set(0);
 
-        Some((height, Tile { width: display_width, pid: pid }))
+        Some((height, Tile { width: display_width,
+                             pid: pid,
+                             last_pc: Some(proc.pc) }))
     }
 
     fn draw(&mut self, window: &Window) {
@@ -209,8 +217,8 @@ impl Tiler {
                 for tile in &row.tiles {
                     if let Some((_height, t)) =
                         self.try_draw_process(window, x as usize, y as usize,
-                                             tile.width, row.height,
-                                             tile.pid) {
+                                              tile.width, row.height,
+                                              tile.pid, tile.last_pc) {
                         x += t.width as i32;
                         new_tiles.push(t);
                         new_active.insert(tile.pid);
@@ -223,7 +231,8 @@ impl Tiler {
                             self.try_draw_process(window, x as usize,
                                                   y as usize,
                                                   (maxx - x) as usize, 
-                                                  row.height, *pid)) {
+                                                  row.height, *pid,
+                                                  None)) {
                         x += t.width as i32;
                         new_active.insert(t.pid);
                         new_tiles.push(t);
@@ -245,7 +254,8 @@ impl Tiler {
                 if let Some((height, t)) =
                     self.try_draw_process(window, x as usize, y as usize,
                                           (maxx - x) as usize, 
-                                          (maxy - y) as usize, *pid) {
+                                          (maxy - y) as usize, *pid,
+                                          None) {
                     new_rows.push(TileRow { height: height,
                                             tiles: vec![t] });
                     new_active.insert(*pid);
@@ -291,9 +301,10 @@ fn main() {
     if has_colors() {
         start_color();
         init_pair(1, pancurses::COLOR_WHITE, pancurses::COLOR_RED);
-        init_pair(2, pancurses::COLOR_WHITE, pancurses::COLOR_BLUE);
-        init_pair(3, pancurses::COLOR_WHITE, pancurses::COLOR_GREEN);
-        init_pair(4, pancurses::COLOR_WHITE, pancurses::COLOR_YELLOW);
+        init_pair(2, pancurses::COLOR_BLACK, pancurses::COLOR_WHITE);
+        init_pair(3, pancurses::COLOR_BLACK, pancurses::COLOR_CYAN);
+        init_pair(4, pancurses::COLOR_BLACK, pancurses::COLOR_BLUE);
+        init_pair(5, pancurses::COLOR_BLACK, pancurses::COLOR_YELLOW);
     }
     window.nodelay(true);
     let mut done = false;

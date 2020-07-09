@@ -3,7 +3,7 @@ host = "0.0.0.0"
 port = 1312
 
 beats_in = "jack_midi_clock"
-period = 24
+period = 6
 
 [out.p1]
 connect = "Qsynth1"
