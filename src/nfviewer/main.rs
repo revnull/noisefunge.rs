@@ -330,6 +330,12 @@ fn main() {
                     tiler.retile();
                     continue 'outer;
                 },
+                Some(Input::Character('q')) => {
+                    break 'outer;
+                },
+                Some(Input::Character('Q')) => {
+                    break 'outer;
+                },
                 _ => { },
             };
         }
