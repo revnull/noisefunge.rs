@@ -118,7 +118,7 @@ impl Engine {
                         proc.resume(None);
                         new_active.push(proc.pid);
                     } else {
-                        self.sleeping.push((proc.pid, c));
+                        self.sleeping.push((proc.pid, c - 1));
                     }
                 },
                 ProcessState::Trap(Syscall::Send(ch, c)) => {

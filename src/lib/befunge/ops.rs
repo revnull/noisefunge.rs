@@ -57,6 +57,9 @@ impl OpSet {
         ops[102] = Some(make_op!(fork)); // f
         ops[115] = Some(make_op!(sleep)); // s
 
+        ops[36] = Some(make_op!(chomp)); // $
+        ops[58] = Some(make_op!(dup)); // :
+        ops[92] = Some(make_op!(swap)); // \
         OpSet(ops)
     }
 
@@ -185,6 +188,26 @@ fn print_byte(proc: &mut Process) {
 fn print_char(proc: &mut Process) {
     let c = pop!(proc);
     proc.trap(Syscall::PrintChar(c));
+}
+
+fn dup(proc: &mut Process) {
+    let c = pop!(proc);
+    proc.push(c);
+    proc.push(c);
+    proc.step();
+}
+
+fn chomp(proc: &mut Process) {
+    let c = pop!(proc);
+    proc.step();
+}
+
+fn swap(proc: &mut Process) {
+    let c = pop!(proc);
+    let d = pop!(proc);
+    proc.push(c);
+    proc.push(d);
+    proc.step();
 }
 
 #[cfg(test)]
