@@ -321,8 +321,16 @@ fn main() {
                 Some(Input::KeyResize) => {
                     tiler.retile();
                     continue 'outer;
-                }
-                Some(i) => window.mvaddstr(3,3,format!("{:?}", i)),
+                },
+                Some(Input::Character('r')) => {
+                    tiler.retile();
+                    continue 'outer;
+                },
+                Some(Input::Character('R')) => {
+                    tiler.retile();
+                    continue 'outer;
+                },
+                _ => { },
             };
         }
 
