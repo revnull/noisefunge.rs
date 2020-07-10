@@ -86,13 +86,12 @@ impl OpSet {
 }
 
 fn noop(proc: &mut Process) {
-    proc.step()
+
 }
 
 fn push_int(i: u8) -> Op {
     let push_i = move |proc: &mut Process| {
         proc.push(i);
-        proc.step()
     };
     make_op!(push_i)
 }
@@ -101,13 +100,11 @@ fn hex_byte(proc: &mut Process) {
     let msb = pop!(proc);
     let lsb = pop!(proc);
     proc.push((msb << 4) + lsb);
-    proc.step();
 }
 
 fn set_direction(dir: Dir) -> Op {
     let set_dir = move |proc: &mut Process| {
         proc.set_direction(dir);
-        proc.step()
     };
     make_op!(set_dir)
 }
@@ -122,7 +119,6 @@ fn rand_direction(proc: &mut Process) {
         _ => panic!("Random number out of range [0,4)")
     };
     proc.set_direction(dir);
-    proc.step();
 }
 
 fn sleep(proc: &mut Process) {
@@ -152,35 +148,30 @@ fn add(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(x + y);
-    proc.step();
 }
 
 fn sub(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y - x);
-    proc.step();
 }
 
 fn mul(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(x * y);
-    proc.step();
 }
 
 fn div(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y / x);
-    proc.step();
 }
 
 fn r#mod(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y % x);
-    proc.step();
 }
 
 fn fork(proc: &mut Process) {
@@ -212,12 +203,10 @@ fn dup(proc: &mut Process) {
     let c = pop!(proc);
     proc.push(c);
     proc.push(c);
-    proc.step();
 }
 
 fn chomp(proc: &mut Process) {
-    let c = pop!(proc);
-    proc.step();
+    pop!(proc);
 }
 
 fn swap(proc: &mut Process) {
@@ -225,7 +214,6 @@ fn swap(proc: &mut Process) {
     let d = pop!(proc);
     proc.push(c);
     proc.push(d);
-    proc.step();
 }
 
 #[cfg(test)]
@@ -251,14 +239,14 @@ mod tests {
         ops.apply_to(&mut proc, None);
         let PC(i) = proc.top().expect("Empty top").pc;
         assert!(i == 2, "PC != 2");
-        assert!(proc.state() == ProcessState::Running(false),
+        assert!(*proc.state() == ProcessState::Running(false),
                 "Process is not running.");
 
         // Rest of program plays out.
         for _ in 1..10 {
             ops.apply_to(&mut proc, None);
         }
-        assert!(proc.state() == ProcessState::Finished,
+        assert!(*proc.state() == ProcessState::Finished,
                 "Process is not running.");
     }
 

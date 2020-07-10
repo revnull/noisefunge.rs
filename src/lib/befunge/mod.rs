@@ -9,6 +9,7 @@ use crate::api::{EngineState, ProcState};
 
 use arr_macro::arr;
 use std::collections::{BTreeMap, HashSet, HashMap, VecDeque};
+use std::mem;
 use std::rc::Rc;
 use serde::{Serialize, Deserialize};
 
@@ -80,143 +81,160 @@ impl Engine {
 
     pub fn step(&mut self) -> Vec<EventLog> {
         let mut log = Vec::new();
-        let mut new_active = Vec::with_capacity(self.active.len());
-        let mut new_sleeping = Vec::with_capacity(self.sleeping.len());
+        let sleeping = mem::take(&mut self.sleeping);
+        let mut active = mem::take(&mut self.active);
 
-        for &(pid, c) in self.sleeping.iter() {
+        for pid in active.iter() {
+            let proc = self.procs.get_mut(pid).expect(
+                &format!("Lost pid: {}", pid));
+            self.ops.apply_to(proc, None);
+        }
+
+        for &(pid, c) in sleeping.iter() {
             if c == 0 {
-                self.procs.get_mut(&pid).map(|p| p.resume(None));
-                new_active.push(pid);
+                self.procs.get_mut(&pid).map(|p| p.resume(None) );
+                active.push(pid);
             } else {
-                new_sleeping.push((pid, c - 1));
+                self.sleeping.push((pid, c - 1));
             }
         }
-        self.sleeping = new_sleeping;
 
         let mut dead = Vec::new();
-        for pid in self.active.iter() {
-            let proc = match self.procs.get_mut(pid) {
-                None => panic!("Lost proc {}", pid),
-                Some(p) => p
-            };
-            self.ops.apply_to(proc, None);
-            match proc.state() {
-                ProcessState::Running(_) => new_active.push(proc.pid),
-                ProcessState::Trap(Syscall::Fork) => {
-                    let pid = self.next_pid;
-                    self.next_pid += 1;
-                    let mut p2 = proc.fork(pid);
-                    proc.resume(Some(0));
-                    p2.resume(Some(1));
-                    new_active.push(proc.pid);
-                    new_active.push(p2.pid);
-                    log.push(EventLog::NewProcess(p2.pid));
-                    self.procs.insert(p2.pid, p2);
-                },
-                ProcessState::Trap(Syscall::Sleep(c)) => {
-                    if c == 0 {
-                        proc.resume(None);
-                        new_active.push(proc.pid);
-                    } else {
-                        self.sleeping.push((proc.pid, c - 1));
-                    }
-                },
-                ProcessState::Trap(Syscall::Send(ch, c)) => {
-                    let i = ch as usize;
-                    let buf = &mut self.buffers[i];
-                    match buf {
-                        MessageQueue::Empty => {
-                            let mut q = VecDeque::new();
-                            q.push_back((proc.pid, c));
-                            *buf = MessageQueue::WriteBlocked(q);
-                        },
-                        MessageQueue::WriteBlocked(q) => {
-                            q.push_back((proc.pid, c));
-                        },
-                        MessageQueue::ReadBlocked(q) => {
+        while !active.is_empty() {
+            let mut next_active = Vec::new();
+
+            for pid in active.iter() {
+                let proc = self.procs.get_mut(pid).expect(
+                    &format!("Lost pid: {}", pid));
+                match proc.state() {
+                    ProcessState::Running(_) => {
+                        proc.step();
+                        self.active.push(proc.pid);
+                    },
+                    ProcessState::Trap(Syscall::Fork) => {
+                        let pid = self.next_pid;
+                        self.next_pid += 1;
+                        let mut p2 = proc.fork(pid);
+                        proc.resume(Some(0));
+                        p2.resume(Some(1));
+                        next_active.push(proc.pid);
+                        next_active.push(p2.pid);
+                        log.push(EventLog::NewProcess(p2.pid));
+                        self.procs.insert(p2.pid, p2);
+                    },
+                    ProcessState::Trap(Syscall::Sleep(dur)) => {
+                        let dur = *dur;
+                        if dur == 0 {
                             proc.resume(None);
-                            new_active.push(proc.pid);
-                            let blocked = q.pop_front()
-                                .expect("Empty ReadBlocked Queue");
-                            let blproc = self.procs.get_mut(&blocked)
-                                .expect("Blocked process not found");
-                            blproc.resume(Some(c));
-                            new_active.push(blproc.pid);
-                            if q.len() == 0 {
-                                *buf = MessageQueue::Empty;
-                            }
-                        },
-                    };
-                },
-                ProcessState::Trap(Syscall::Receive(ch)) => {
-                    let i = ch as usize;
-                    let buf = &mut self.buffers[i];
-                    match buf {
-                        MessageQueue::Empty => {
-                            let mut q = VecDeque::new();
-                            q.push_back(proc.pid);
-                            *buf = MessageQueue::ReadBlocked(q);
-                        },
-                        MessageQueue::ReadBlocked(q) => {
-                            q.push_back(proc.pid);
-                        },
-                        MessageQueue::WriteBlocked(q) => {
-                            let (blocked, c) = q.pop_front()
-                                .expect("Empty ReadBlocked Queue");
-                            proc.resume(Some(c));
-                            new_active.push(proc.pid);
-                            let blproc = self.procs.get_mut(&blocked)
-                                .expect("Blocked process not found");
-                            blproc.resume(None);
-                            new_active.push(blproc.pid);
-                            if q.len() == 0 {
-                                *buf = MessageQueue::Empty;
-                            }
-                        },
+                            next_active.push(proc.pid);
+                        } else {
+                            self.sleeping.push((proc.pid, dur - 1));
+                        }
+                    },
+                    ProcessState::Trap(Syscall::Send(chan, c)) => {
+                        let i = *chan as usize;
+                        let c = *c;
+                        let buf = &mut self.buffers[i];
+                        match buf {
+                            MessageQueue::Empty => {
+                                let mut q = VecDeque::new();
+                                q.push_back((proc.pid, c));
+                                *buf = MessageQueue::WriteBlocked(q);
+                            },
+                            MessageQueue::WriteBlocked(q) => {
+                                q.push_back((proc.pid, c));
+                            },
+                            MessageQueue::ReadBlocked(q) => {
+                                proc.resume(None);
+                                next_active.push(proc.pid);
+                                let blocked = q.pop_front()
+                                    .expect("Empty ReadBlocked Queue");
+                                let blproc = self.procs.get_mut(&blocked)
+                                    .expect("Blocked process not found");
+                                blproc.resume(Some(c));
+                                next_active.push(blproc.pid);
+                                if q.len() == 0 {
+                                    *buf = MessageQueue::Empty;
+                                }
+                            },
+                        };
+                    },
+                    ProcessState::Trap(Syscall::Receive(ch)) => {
+                        let i = *ch as usize;
+                        let buf = &mut self.buffers[i];
+                        match buf {
+                            MessageQueue::Empty => {
+                                let mut q = VecDeque::new();
+                                q.push_back(proc.pid);
+                                *buf = MessageQueue::ReadBlocked(q);
+                            },
+                            MessageQueue::ReadBlocked(q) => {
+                                q.push_back(proc.pid);
+                            },
+                            MessageQueue::WriteBlocked(q) => {
+                                let (blocked, c) = q.pop_front()
+                                    .expect("Empty ReadBlocked Queue");
+                                proc.resume(Some(c));
+                                next_active.push(proc.pid);
+                                let blproc = self.procs.get_mut(&blocked)
+                                    .expect("Blocked process not found");
+                                blproc.resume(None);
+                                next_active.push(blproc.pid);
+                                if q.len() == 0 {
+                                    *buf = MessageQueue::Empty;
+                                }
+                            },
+                        };
+                    },
+                    ProcessState::Trap(Syscall::Defop(c)) => {
+                        let top = proc.top().unwrap();
+                        let pc = top.pc;
+                        let dir = top.dir;
+                        let mem = Rc::clone(&top.memory);
+                        log.push(EventLog::Finished(proc.pid));
+                        dead.push(proc.pid);
+                        self.ops.defop(*c, Op::new(Rc::new( move |p| {
+                            p.call(Rc::clone(&mem), pc, dir);
+                        })));
+                    },
+                    ProcessState::Trap(Syscall::Execute(c)) => {
+                        self.ops.apply_to(proc, Some(*c));
+                        proc.resume(None);
+                        next_active.push(proc.pid);
+                    },
+                    ProcessState::Trap(Syscall::PrintChar(c)) => {
+                        log.push(EventLog::ProcessPrintChar(proc.pid, *c));
+                        proc.resume(None);
+                        next_active.push(proc.pid);
+                    },
+                    ProcessState::Trap(Syscall::PrintNum(c)) => {
+                        log.push(EventLog::ProcessPrintNum(proc.pid, *c));
+                        proc.resume(None);
+                        next_active.push(proc.pid);
+                    },
+                    ProcessState::Finished => {
+                        log.push(EventLog::Finished(proc.pid));
+                        dead.push(proc.pid);
+                    },
+                    ProcessState::Crashed(msg) => {
+                        log.push(EventLog::Crashed(proc.pid, msg));
+                        dead.push(proc.pid);
                     }
-                },
-                ProcessState::Trap(Syscall::PrintChar(c)) => {
-                    log.push(EventLog::ProcessPrintChar(proc.pid, c));
-                    proc.resume(None);
-                    new_active.push(proc.pid);
-                },
-                ProcessState::Trap(Syscall::PrintNum(c)) => {
-                    log.push(EventLog::ProcessPrintNum(proc.pid, c));
-                    proc.resume(None);
-                    new_active.push(proc.pid);
-                },
-                ProcessState::Trap(Syscall::Defop(c)) => {
-                    let top = proc.top().unwrap();
-                    let pc = top.pc;
-                    let dir = top.dir;
-                    let mem = Rc::clone(&top.memory);
-                    log.push(EventLog::Finished(proc.pid));
-                    dead.push(proc.pid);
-                    self.ops.defop(c, Op::new(Rc::new( move |p| {
-                        p.call(Rc::clone(&mem), pc, dir);
-                    })));
-                },
-                ProcessState::Trap(Syscall::Execute(c)) => {
-                    self.ops.apply_to(proc, Some(c));
-                },
-                ProcessState::Finished => {
-                    log.push(EventLog::Finished(proc.pid));
-                    dead.push(proc.pid);
-                },
-                ProcessState::Crashed(msg) => {
-                    log.push(EventLog::Crashed(proc.pid, msg));
-                    dead.push(proc.pid);
+                    s => panic!("Unhandled state: {:?}", s),
                 }
-                s => panic!("Unhandled state: {:?}", s),
             }
-        };
+            /*
+                s => panic!("Unhandled state: {:?}", s),
+                */
+            active = next_active;
+        }
 
         for pid in dead {
             self.procs.remove(&pid);
         }
 
-        self.active = new_active;
         self.beat += 1;
+
         log
     }
 

@@ -126,8 +126,8 @@ impl Process {
         }
     }
 
-    pub fn state(&self) -> ProcessState {
-        self.state
+    pub fn state(&self) -> &ProcessState {
+        &self.state
     }
 
     pub fn set_state(&mut self, st: ProcessState) {
@@ -157,7 +157,6 @@ impl Process {
             ProcessStack { memory : prog,
                            pc: pc,
                            dir: dir });
-        self.step();
     }
 
     pub fn r#return(&mut self) {
@@ -239,7 +238,6 @@ impl Process {
             Some(c) => self.data_stack.push(c)
         };
         self.set_state(ProcessState::Running(false));
-        self.step();
     }
 
     pub fn apply(&mut self, op: &Op) {
