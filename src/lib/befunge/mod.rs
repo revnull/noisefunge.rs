@@ -99,7 +99,7 @@ impl Engine {
                 None => panic!("Lost proc {}", pid),
                 Some(p) => p
             };
-            self.ops.apply_to(proc);
+            self.ops.apply_to(proc, None);
             match proc.state() {
                 ProcessState::Running(_) => new_active.push(proc.pid),
                 ProcessState::Trap(Syscall::Fork) => {
@@ -179,12 +179,26 @@ impl Engine {
                     log.push(EventLog::ProcessPrintChar(proc.pid, c));
                     proc.resume(None);
                     new_active.push(proc.pid);
-                }
+                },
                 ProcessState::Trap(Syscall::PrintNum(c)) => {
                     log.push(EventLog::ProcessPrintNum(proc.pid, c));
                     proc.resume(None);
                     new_active.push(proc.pid);
-                }
+                },
+                ProcessState::Trap(Syscall::Defop(c)) => {
+                    let top = proc.top().unwrap();
+                    let pc = top.pc;
+                    let dir = top.dir;
+                    let mem = Rc::clone(&top.memory);
+                    log.push(EventLog::Finished(proc.pid));
+                    dead.push(proc.pid);
+                    self.ops.defop(c, Op::new(Rc::new( move |p| {
+                        p.call(Rc::clone(&mem), pc, dir);
+                    })));
+                },
+                ProcessState::Trap(Syscall::Execute(c)) => {
+                    self.ops.apply_to(proc, Some(c));
+                },
                 ProcessState::Finished => {
                     log.push(EventLog::Finished(proc.pid));
                     dead.push(proc.pid);

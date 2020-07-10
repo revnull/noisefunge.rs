@@ -1,4 +1,3 @@
-
 use rand::Rng;
 use std::rc::Rc;
 use arr_macro::arr;
@@ -60,12 +59,17 @@ impl OpSet {
         ops[36] = Some(make_op!(chomp)); // $
         ops[58] = Some(make_op!(dup)); // :
         ops[92] = Some(make_op!(swap)); // \
+
+        ops[91] = Some(make_op!(defop)); // [
+        ops[93] = Some(make_op!(r#return)); // ]
+        ops[101] = Some(make_op!(execute)); // e
+
         OpSet(ops)
     }
 
-    pub fn apply_to(&self, proc: &mut Process) {
+    pub fn apply_to(&self, proc: &mut Process, o: Option<u8>) {
         let OpSet(ops) = self;
-        let c = match proc.peek() {
+        let c = match o.or_else(|| proc.peek()) {
             None => return,
             Some(c) => c
         };
@@ -73,6 +77,10 @@ impl OpSet {
             None => { proc.die("Unknown op"); }
             Some(op) => proc.apply(op)
         }
+    }
+
+    pub fn defop(&mut self, c: u8, op: Op) {
+        self.0[c as usize] = Some(op);
     }
 
 }
@@ -122,8 +130,18 @@ fn sleep(proc: &mut Process) {
     proc.trap(Syscall::Sleep(beats));
 }
  
+fn defop(proc: &mut Process) {
+    let op = pop!(proc);
+    proc.trap(Syscall::Defop(op));
+}
+
 fn r#return(proc: &mut Process) {
     proc.r#return();
+}
+
+fn execute(proc: &mut Process) {
+    let c = pop!(proc);
+    proc.trap(Syscall::Execute(c));
 }
 
 fn quit(proc: &mut Process) {
@@ -230,7 +248,7 @@ mod tests {
         let mut proc = demo_proc_1();
         proc.top_mut().map(|t| t.pc = PC(1));
         let ops = OpSet::new();
-        ops.apply_to(&mut proc);
+        ops.apply_to(&mut proc, None);
         let PC(i) = proc.top().expect("Empty top").pc;
         assert!(i == 2, "PC != 2");
         assert!(proc.state() == ProcessState::Running(false),
@@ -238,7 +256,7 @@ mod tests {
 
         // Rest of program plays out.
         for _ in 1..10 {
-            ops.apply_to(&mut proc);
+            ops.apply_to(&mut proc, None);
         }
         assert!(proc.state() == ProcessState::Finished,
                 "Process is not running.");
@@ -252,7 +270,7 @@ mod tests {
             let mut proc = demo_proc_1();
             proc.top_mut().map(|t| t.pc = PC(i * 6));
             for _ in 1..10 {
-                ops.apply_to(&mut proc);
+                ops.apply_to(&mut proc, None);
             }
             results.push(pop!(proc));
         }

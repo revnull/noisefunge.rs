@@ -85,7 +85,9 @@ pub enum Syscall {
     PrintChar(u8),
     PrintNum(u8),
     Send(u8,u8),
-    Receive(u8)
+    Receive(u8),
+    Defop(u8),
+    Execute(u8),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -150,11 +152,12 @@ impl Process {
         self.call_stack.get_mut(i - 1)
     }
 
-    pub fn call(&mut self, prog: Rc<Prog>) {
+    pub fn call(&mut self, prog: Rc<Prog>, pc: PC, dir: Dir) {
         self.call_stack.push(
             ProcessStack { memory : prog,
-                           pc: PC(0),
-                           dir: Dir::R });
+                           pc: pc,
+                           dir: dir });
+        self.step();
     }
 
     pub fn r#return(&mut self) {
