@@ -131,6 +131,10 @@ impl Engine {
                             self.sleeping.push((proc.pid, dur - 1));
                         }
                     },
+                    ProcessState::Trap(Syscall::Pause) => {
+                        proc.resume(None);
+                        self.active.push(proc.pid);
+                    },
                     ProcessState::Trap(Syscall::Send(chan, c)) => {
                         let i = *chan as usize;
                         let c = *c;
@@ -197,7 +201,7 @@ impl Engine {
                             p.call(Rc::clone(&mem), pc, dir);
                         })));
                     },
-                    ProcessState::Trap(Syscall::Execute(c)) => {
+                    ProcessState::Trap(Syscall::Call(c)) => {
                         self.ops.apply_to(proc, Some(*c));
                         proc.resume(None);
                         next_active.push(proc.pid);

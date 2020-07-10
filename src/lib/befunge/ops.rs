@@ -62,7 +62,9 @@ impl OpSet {
 
         ops[91] = Some(make_op!(defop)); // [
         ops[93] = Some(make_op!(r#return)); // ]
+        ops[99] = Some(make_op!(call)); // c
         ops[101] = Some(make_op!(execute)); // e
+        ops[103] = Some(make_op!(goto)); // g
 
         OpSet(ops)
     }
@@ -137,7 +139,31 @@ fn r#return(proc: &mut Process) {
 
 fn execute(proc: &mut Process) {
     let c = pop!(proc);
-    proc.trap(Syscall::Execute(c));
+    proc.trap(Syscall::Call(c));
+}
+
+fn call(proc: &mut Process) {
+    let y = pop!(proc) as usize;
+    let x = pop!(proc) as usize;
+    let prog = &proc.top().unwrap().memory;
+    match prog.xy_to_pc(x, y).map(|pc| prog.lookup(pc)) {
+        Some(c) => proc.trap(Syscall::Call(c)),
+        None => proc.die("Call exceeded bounds"),
+    }
+}
+
+fn goto(proc: &mut Process) {
+    let y = pop!(proc) as usize;
+    let x = pop!(proc) as usize;
+    let mut top = proc.top_mut().unwrap();
+    match top.memory.xy_to_pc(x, y) {
+        Some(pc) => {
+            top.pc = pc;
+            proc.trap(Syscall::Pause);
+        }
+        None => proc.die("Call exceeded bounds"),
+    }
+
 }
 
 fn quit(proc: &mut Process) {
@@ -237,17 +263,21 @@ mod tests {
         proc.top_mut().map(|t| t.pc = PC(1));
         let ops = OpSet::new();
         ops.apply_to(&mut proc, None);
+        proc.step();
         let PC(i) = proc.top().expect("Empty top").pc;
         assert!(i == 2, "PC != 2");
         assert!(*proc.state() == ProcessState::Running(false),
                 "Process is not running.");
 
         // Rest of program plays out.
-        for _ in 1..10 {
+        for _ in 1..5 {
             ops.apply_to(&mut proc, None);
+            if proc.is_running() {
+                proc.step();
+            }
         }
         assert!(*proc.state() == ProcessState::Finished,
-                "Process is not running.");
+                format!("Process is not finished: {:?}", proc.state()));
     }
 
     #[test]

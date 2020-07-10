@@ -5,6 +5,7 @@ use clap::{Arg, App};
 use pancurses::{initscr, cbreak, noecho, endwin, Input, has_colors,
                 start_color, init_pair, curs_set, Window};
 use std::collections::HashSet;
+use std::cmp;
 use std::time::Duration;
 use std::thread;
 use std::sync::{Arc, Mutex, Condvar};
@@ -215,10 +216,11 @@ impl Tiler {
             if let Some(row) = old_rows.next() {
                 let mut new_tiles = Vec::new();
                 for tile in &row.tiles {
-                    if let Some((_height, t)) =
+                    if let Some((_height, mut t)) =
                         self.try_draw_process(window, x as usize, y as usize,
                                               tile.width, row.height,
                                               tile.pid, tile.last_pc) {
+                        t.width = cmp::max(t.width, tile.width);
                         x += t.width as i32;
                         new_tiles.push(t);
                         new_active.insert(tile.pid);

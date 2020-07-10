@@ -62,6 +62,15 @@ impl Prog {
         self.data[i as usize]
     }
 
+    pub fn xy_to_pc(&self, x: usize, y: usize) -> Option<PC> {
+        let i = self.width * y + x;
+        if i < self.data.len() {
+            Some(PC(i))
+        } else {
+            None
+        }
+    }
+
     pub fn state_tuple(&self, cm: &CharMap) -> (usize, String) {
         let mut res = String::new();
         for c in &self.data {
@@ -82,12 +91,13 @@ pub struct ProcessStack {
 pub enum Syscall {
     Fork,
     Sleep(u8),
+    Pause,
     PrintChar(u8),
     PrintNum(u8),
     Send(u8,u8),
     Receive(u8),
     Defop(u8),
-    Execute(u8),
+    Call(u8),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
