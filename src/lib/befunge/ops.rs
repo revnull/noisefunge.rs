@@ -175,25 +175,25 @@ fn quit(proc: &mut Process) {
 fn add(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
-    proc.push(x + y);
+    proc.push(x.wrapping_add(y));
 }
 
 fn sub(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
-    proc.push(y - x);
+    proc.push(y.wrapping_sub(x));
 }
 
 fn mul(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
-    proc.push(x * y);
+    proc.push(x.wrapping_mul(y));
 }
 
 fn div(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
-    proc.push(y / x);
+    proc.push(y.wrapping_div(x));
 }
 
 fn r#mod(proc: &mut Process) {
