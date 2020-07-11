@@ -66,6 +66,9 @@ impl OpSet {
         ops[101] = Some(make_op!(execute)); // e
         ops[103] = Some(make_op!(goto)); // g
 
+        ops[112] = Some(make_op!(put)); // p
+        ops[103] = Some(make_op!(get)); // g
+
         OpSet(ops)
     }
 
@@ -163,7 +166,6 @@ fn goto(proc: &mut Process) {
         }
         None => proc.die("Call exceeded bounds"),
     }
-
 }
 
 fn quit(proc: &mut Process) {
@@ -240,6 +242,34 @@ fn swap(proc: &mut Process) {
     let d = pop!(proc);
     proc.push(c);
     proc.push(d);
+}
+
+fn put(proc: &mut Process) {
+    let y = pop!(proc) as usize;
+    let x = pop!(proc) as usize;
+    let c = pop!(proc);
+
+    let mut top = proc.top_mut().unwrap();
+    match top.memory.xy_to_pc(x, y) {
+        Some(pc) => {
+            Rc::make_mut(&mut top.memory).update(pc, c);
+        },
+        None => proc.die("Put outside of bounds."),
+    }
+}
+
+fn get(proc: &mut Process) {
+    let y = pop!(proc) as usize;
+    let x = pop!(proc) as usize;
+
+    let top = proc.top().unwrap();
+    match top.memory.xy_to_pc(x, y) {
+        Some(pc) => {
+            proc.push(top.memory.lookup(pc));
+        },
+        None => proc.die("Get outside of bounds."),
+    }
+    
 }
 
 #[cfg(test)]

@@ -59,11 +59,16 @@ impl Prog {
 
     pub fn lookup(&self, pc : PC) -> u8 {
         let PC(i) = pc;
-        self.data[i as usize]
+        self.data[i]
+    }
+
+    pub fn update(&mut self, pc: PC, c: u8) {
+        let PC(i) = pc;
+        self.data[i] = c;
     }
 
     pub fn xy_to_pc(&self, x: usize, y: usize) -> Option<PC> {
-        let i = self.width * y + x;
+        let i = (self.width * y) + x;
         if i < self.data.len() {
             Some(PC(i))
         } else {
