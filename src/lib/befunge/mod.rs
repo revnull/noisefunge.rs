@@ -66,10 +66,10 @@ impl Engine {
         let rcprog = Rc::new(prog);
         let prog = match self.progs.get(&rcprog) {
             None => {
-                self.progs.insert(rcprog.clone());
+                self.progs.insert(Rc::clone(&rcprog));
                 rcprog
             },
-            Some(p) => p.clone()
+            Some(p) => Rc::clone(p)
         };
 
         let proc = Process::new(pid, prog);
