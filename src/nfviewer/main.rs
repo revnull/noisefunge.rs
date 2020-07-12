@@ -66,6 +66,7 @@ fn start_request_thread(baseuri: &str) -> Handle {
                             .map(|s: EngineState| { prev = s.beat; s })
                     } else {
                         delay = true;
+                        prev = 0;
                         Err(format!("Bad status code: {:?}",
                                     response.status()))
                     }

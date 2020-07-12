@@ -48,7 +48,7 @@ impl<T> Responder<T> {
 #[derive(Debug)]
 pub enum FungeRequest {
     StartProcess(String, Responder<Result<u64,String>>),
-    GetState(Option<u64>, Responder<Arc<Vec<u8>>>),
+    GetState(Option<u64>, Responder<Option<Arc<Vec<u8>>>>),
 }
 
 unsafe impl Send for FungeRequest {}
@@ -74,8 +74,11 @@ fn get_state(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     let responder = Responder::new();
     sender.send(FungeRequest::GetState(prev, responder.clone()));
 
-    Response::from_data("application/json; charset=utf-8", 
-                        (*responder.wait()).clone())
+    match responder.wait() {
+        Some(bytes) => Response::from_data("application/json; charset=utf-8",
+                                           (*bytes).clone()),
+        None => Response::empty_400()
+    }
 }
 
 fn handle_request(sender: &Sender<FungeRequest>, request: &Request)

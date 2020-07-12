@@ -27,7 +27,7 @@ struct FungedServer {
     engine: Engine,
     state: EngineState,
     state_vec: Arc<Vec<u8>>,
-    waiting: Vec<(u64, Responder<Arc<Vec<u8>>>)>
+    waiting: Vec<(u64, Responder<Option<Arc<Vec<u8>>>>)>
 }
 
 impl FungedServer {
@@ -55,7 +55,9 @@ impl FungedServer {
             GetState(prev, rspndr) => {
                 let prev = prev.unwrap_or(0);
                 if prev < self.state.beat {
-                    rspndr.respond(Arc::clone(&self.state_vec));
+                    rspndr.respond(Some(Arc::clone(&self.state_vec)));
+                } else if prev > self.state.beat {
+                    rspndr.respond(None);
                 } else {
                     self.waiting.push((prev, rspndr));
                 }
@@ -71,7 +73,7 @@ impl FungedServer {
         let beat = self.state.beat;
         self.waiting.retain(|(prev, rspndr)|
             if *prev < beat {
-                rspndr.respond(Arc::clone(state_vec));
+                rspndr.respond(Some(Arc::clone(state_vec)));
                 false
             } else {
                 true
