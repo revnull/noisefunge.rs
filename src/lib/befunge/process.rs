@@ -248,6 +248,10 @@ impl Process {
     }
 
     pub fn resume(&mut self, push: Option<u8>) {
+        match self.state {
+            ProcessState::Trap(_) => { },
+            _ => return
+        }
         match push {
             None => {},
             Some(c) => self.data_stack.push(c)

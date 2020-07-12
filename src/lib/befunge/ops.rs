@@ -47,6 +47,12 @@ impl OpSet {
         ops[43] = Some(make_op!(add)); // +
         ops[45] = Some(make_op!(sub)); // -
         ops[47] = Some(make_op!(div)); // /
+        ops[33] = Some(make_op!(not)); // !
+        ops[61] = Some(make_op!(eq)); // !
+        ops[96] = Some(make_op!(gt)); // `
+
+        ops[95] = Some(make_op!(cond_h)); // _
+        ops[124] = Some(make_op!(cond_v)); // |
 
         ops[46] = Some(make_op!(send)); // .
         ops[126] = Some(make_op!(receive)); // ~
@@ -65,6 +71,7 @@ impl OpSet {
         ops[99] = Some(make_op!(call)); // c
         ops[101] = Some(make_op!(execute)); // e
         ops[103] = Some(make_op!(goto)); // g
+        ops[35] = Some(make_op!(jump)); // #
 
         ops[112] = Some(make_op!(put)); // p
         ops[103] = Some(make_op!(get)); // g
@@ -200,6 +207,68 @@ fn r#mod(proc: &mut Process) {
     let x = pop!(proc);
     let y = pop!(proc);
     proc.push(y % x);
+}
+
+fn not(proc: &mut Process) {
+    let x = pop!(proc);
+    if x == 0 {
+        proc.push(1);
+    } else {
+        proc.push(0);
+    }
+}
+
+fn eq(proc: &mut Process) {
+    let x = pop!(proc);
+    let y = pop!(proc);
+
+    if x == y {
+        proc.push(1);
+    } else {
+        proc.push(0);
+    }
+}
+
+fn gt(proc: &mut Process) {
+    let x = pop!(proc);
+    let y = pop!(proc);
+
+    if y > x {
+        proc.push(1);
+    } else {
+        proc.push(0);
+    }
+}
+
+fn jump(proc: &mut Process) {
+    proc.step();
+}
+
+fn condjump(proc: &mut Process) {
+    let x = pop!(proc);
+    if x == 0 {
+        proc.step();
+    }
+}
+
+fn cond_h(proc: &mut Process) {
+    let x = pop!(proc);
+
+    if x == 0 {
+        proc.set_direction(Dir::R);
+    } else {
+        proc.set_direction(Dir::L);
+    }
+}
+
+fn cond_v(proc: &mut Process) {
+    let x = pop!(proc);
+
+    if x == 0 {
+        proc.set_direction(Dir::D);
+    } else {
+        proc.set_direction(Dir::U);
+    }
 }
 
 fn fork(proc: &mut Process) {
