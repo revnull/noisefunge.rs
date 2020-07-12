@@ -31,3 +31,6 @@ program = 0
 [channel.1]
 program = 5
 
+[channel.18]
+bank = 128
+program = 0

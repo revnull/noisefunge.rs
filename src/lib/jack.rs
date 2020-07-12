@@ -144,12 +144,13 @@ impl JackHandle {
                                             */
                                     }
                                     MidiMsg::Program(ch, bank, patch) => {
-                                        let (ch, wtr) = wtrs.get_writer(ch).unwrap();
+                                        let (ch, wtr) = wtrs.get_writer(ch)
+                                                            .unwrap();
                                         if let Some(bank) = bank {
                                             wtr.write(&jack::RawMidi {
                                                 time: t,
                                                 bytes: &[
-                                                    176 + ch, bank
+                                                    176 + ch, 00, bank
                                                 ] });
                                         }
                                         if let Some(patch) = patch {
