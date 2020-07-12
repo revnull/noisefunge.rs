@@ -345,9 +345,9 @@ fn get(proc: &mut Process) {
 }
 
 fn writebuf(proc: &mut Process) {
-    let pch = pop!(proc);
-    let vel = pop!(proc);
     let dur = pop!(proc);
+    let vel = pop!(proc);
+    let pch = pop!(proc);
     let cha = pop!(proc);
 
     proc.set_note(Note { pch: pch, vel: vel, cha: cha, dur: dur });

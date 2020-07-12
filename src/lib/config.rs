@@ -4,9 +4,10 @@ use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
 
 pub struct ChannelConfig {
-    local: Rc<str>,
-    bank: Option<u8>,
-    program: Option<u8>
+    pub local: Rc<str>,
+    pub starting: u8,
+    pub bank: Option<u8>,
+    pub program: Option<u8>
 }
 
 pub struct FungedConfig {
@@ -85,6 +86,7 @@ impl FungedConfig {
                     for i in ch..=end {
                         channels[i as usize] = Some(
                             ChannelConfig { local: Rc::clone(&local),
+                                            starting: ch as u8,
                                             bank: None,
                                             program: None });
                     }
@@ -106,7 +108,7 @@ impl FungedConfig {
             table.get("bank").and_then(|v| v.clone().into_int().ok())
                              .map(|b| ch.bank = Some(b as u8));
             table.get("program").and_then(|v| v.clone().into_int().ok())
-                                .map(|b| ch.bank = Some(b as u8));
+                                .map(|b| ch.program = Some(b as u8));
         }
 
         FungedConfig { host: host,
