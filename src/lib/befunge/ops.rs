@@ -2,7 +2,7 @@ use rand::Rng;
 use std::rc::Rc;
 use arr_macro::arr;
 
-use super::process::{Process, Prog, ProcessState, Syscall, Dir, Op, PC};
+use super::process::{Process, Prog, ProcessState, Syscall, Dir, Op, PC, Note};
 
 macro_rules! pop {
     ($proc : ident) => {
@@ -75,6 +75,9 @@ impl OpSet {
 
         ops[112] = Some(make_op!(put)); // p
         ops[103] = Some(make_op!(get)); // g
+
+        ops[90] = Some(make_op!(play)); // Z
+        ops[122] = Some(make_op!(writebuf)); // z
 
         OpSet(ops)
     }
@@ -339,6 +342,19 @@ fn get(proc: &mut Process) {
         None => proc.die("Get outside of bounds."),
     }
     
+}
+
+fn writebuf(proc: &mut Process) {
+    let pch = pop!(proc);
+    let vel = pop!(proc);
+    let dur = pop!(proc);
+    let cha = pop!(proc);
+
+    proc.set_note(Note { pch: pch, vel: vel, cha: cha, dur: dur });
+}
+
+fn play(proc: &mut Process) {
+    proc.trap(Syscall::Play(*proc.get_note()));
 }
 
 #[cfg(test)]

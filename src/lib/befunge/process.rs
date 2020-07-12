@@ -103,6 +103,7 @@ pub enum Syscall {
     Receive(u8),
     Defop(u8),
     Call(u8),
+    Play(Note),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -113,12 +114,21 @@ pub enum ProcessState {
     Crashed(&'static str),
 }
 
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Note {
+    pub cha: u8,
+    pub pch: u8,
+    pub vel: u8,
+    pub dur: u8
+}
+
 #[derive(Clone)]
 pub struct Process {
     pub pid: u64,
     data_stack: Vec<u8>,
     call_stack: Vec<ProcessStack>,
-    state: ProcessState
+    state: ProcessState,
+    note: Note
 }
 
 impl Process {
@@ -128,10 +138,11 @@ impl Process {
                                 dir: Dir::R };
         let mut stvec = Vec::new();
         stvec.push(st);
-        Process { pid : pid,
-                  data_stack : Vec::new(),
-                  call_stack : stvec,
-                  state : ProcessState::Running(false) }
+        Process { pid: pid,
+                  data_stack: Vec::new(),
+                  call_stack: stvec,
+                  state: ProcessState::Running(false),
+                  note: Note::default() }
     }
 
     pub fn is_running(&self) -> bool {
@@ -274,6 +285,14 @@ impl Process {
         let mut new = self.clone();
         new.pid = newpid;
         return new
+    }
+
+    pub fn set_note(&mut self, note: Note) {
+        self.note = note;
+    }
+
+    pub fn get_note(&self) -> &Note {
+        &self.note
     }
 }
 

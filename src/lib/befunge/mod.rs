@@ -37,6 +37,7 @@ pub enum EventLog {
     NewProcess(u64),
     ProcessPrintChar(u64, u8),
     ProcessPrintNum(u64, u8),
+    Play(Note),
     Finished(u64),
     Crashed(u64, &'static str),
 }
@@ -213,6 +214,11 @@ impl Engine {
                     },
                     ProcessState::Trap(Syscall::PrintNum(c)) => {
                         log.push(EventLog::ProcessPrintNum(proc.pid, *c));
+                        proc.resume(None);
+                        next_active.push(proc.pid);
+                    },
+                    ProcessState::Trap(Syscall::Play(note)) => {
+                        log.push(EventLog::Play(*note));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
