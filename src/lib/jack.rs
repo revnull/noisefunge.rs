@@ -109,8 +109,6 @@ impl JackHandle {
         let (snd1, rcv1) = bounded(128);
         let (snd2, rcv2) = bounded(1);
 
-        let mut px = client.register_port("outoutout", MidiOut::default())
-                           .expect("foo");
         let handler = {
             let r1 = rcv1;
             let mut i :u64 = 0;
@@ -123,25 +121,24 @@ impl JackHandle {
                             i += 1;
                             snd2.try_send(i);
                             for msg in r1.try_iter() {
-                                println!("{:?}", msg);
                                 match msg {
                                     MidiMsg::On(ch, pch, vel) => {
-                                    /*
+                                        let (ch, wtr) = wtrs.get_writer(ch)
+                                                            .unwrap();
                                         wtr.write(&jack::RawMidi {
                                             time: t,
                                             bytes: &[
                                                 144 + ch, pch, vel
                                             ] });
-                                            */
                                     },
                                     MidiMsg::Off(ch, pch) => {
-                                        /*
+                                        let (ch, wtr) = wtrs.get_writer(ch)
+                                                            .unwrap();
                                         wtr.write(&jack::RawMidi {
                                             time: t,
                                             bytes: &[
                                                 144 + ch, pch, 0
                                             ] });
-                                            */
                                     }
                                     MidiMsg::Program(ch, bank, patch) => {
                                         let (ch, wtr) = wtrs.get_writer(ch)

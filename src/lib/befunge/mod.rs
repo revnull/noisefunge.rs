@@ -80,7 +80,7 @@ impl Engine {
         pid
     }
 
-    pub fn step(&mut self) -> Vec<EventLog> {
+    pub fn step(&mut self) -> (u64, Vec<EventLog>) {
         let mut log = Vec::new();
         let sleeping = mem::take(&mut self.sleeping);
         let mut active = mem::take(&mut self.active);
@@ -243,9 +243,10 @@ impl Engine {
             self.procs.remove(&pid);
         }
 
+        let oldbeat = self.beat;
         self.beat += 1;
 
-        log
+        (oldbeat, log)
     }
 
     pub fn state(&self) -> EngineState {
@@ -292,8 +293,8 @@ mod tests {
         for i in 1..7  {
             eng.step();
         }
-        assert!(eng.step() == vec![EventLog::Finished(1)]);
-        assert!(eng.step() == vec![EventLog::ProcessPrintNum(2, 5)]);
-        assert!(eng.step() == vec![EventLog::Finished(2)]);
+        assert!(eng.step().1 == vec![EventLog::Finished(1)]);
+        assert!(eng.step().1 == vec![EventLog::ProcessPrintNum(2, 5)]);
+        assert!(eng.step().1 == vec![EventLog::Finished(2)]);
     }
 }

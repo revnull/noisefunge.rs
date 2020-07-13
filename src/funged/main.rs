@@ -5,6 +5,7 @@ use noisefunge::server::FungeRequest::*;
 use noisefunge::befunge::*;
 use noisefunge::config::*;
 use noisefunge::api::*;
+use noisefunge::midi_bridge::*;
 use std::{thread, time};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -88,6 +89,7 @@ fn main() {
         FungedConfig::read_config(&read_args()));
 
     let mut handle = JackHandle::new(&server.config);
+    let mut bridge = MidiBridge::new(&server.config, &handle);
     let http_serv = ServerHandle::new(&server.config);
     let mut prev_i = 0;
 
@@ -97,7 +99,8 @@ fn main() {
                 let i = msg.expect("Failed to read from beat channel.");
                 for j in prev_i..i {
                     if j % server.config.period == 0 {
-                        let log = server.engine.step();
+                        let (beat, log) = server.engine.step();
+                        bridge.step(beat, &log);
                         for n in log {
                             println!("log: {:?}", n);
                         };
