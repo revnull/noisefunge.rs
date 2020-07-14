@@ -88,6 +88,7 @@ impl Engine {
         for pid in active.iter() {
             let proc = self.procs.get_mut(pid).expect(
                 &format!("Lost pid: {}", pid));
+            proc.clear_output();
             match proc.state() {
                 ProcessState::Running(true) => {
                     match proc.peek() {
@@ -222,11 +223,13 @@ impl Engine {
                     },
                     ProcessState::Trap(Syscall::PrintChar(c)) => {
                         log.push(EventLog::PrintChar(proc.pid, *c));
+                        proc.set_output(format!("{}", self.charmap[*c]));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
                     ProcessState::Trap(Syscall::PrintNum(c)) => {
                         log.push(EventLog::PrintNum(proc.pid, *c));
+                        proc.set_output(format!("{:X}", c));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
@@ -246,9 +249,7 @@ impl Engine {
                     s => panic!("Unhandled state: {:?}", s),
                 }
             }
-            /*
-                s => panic!("Unhandled state: {:?}", s),
-                */
+
             active = next_active;
         }
 
@@ -281,7 +282,8 @@ impl Engine {
             let PC(pc) = top.pc;
             procs.insert(*pid, ProcState { prog: *prog_index,
                                            pc: pc,
-                                           active: proc.is_running()});
+                                           active: proc.is_running(),
+                                           output: proc.get_output() });
         }
 
         EngineState { beat: self.beat,

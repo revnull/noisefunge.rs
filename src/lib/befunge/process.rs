@@ -128,7 +128,8 @@ pub struct Process {
     data_stack: Vec<u8>,
     call_stack: Vec<ProcessStack>,
     state: ProcessState,
-    note: Note
+    note: Note,
+    output: Option<String>
 }
 
 impl Process {
@@ -142,7 +143,8 @@ impl Process {
                   data_stack: Vec::new(),
                   call_stack: stvec,
                   state: ProcessState::Running(false),
-                  note: Note::default() }
+                  note: Note::default(),
+                  output: None }
     }
 
     pub fn is_running(&self) -> bool {
@@ -293,6 +295,18 @@ impl Process {
 
     pub fn get_note(&self) -> &Note {
         &self.note
+    }
+
+    pub fn clear_output(&mut self) {
+        self.output = None
+    }
+
+    pub fn set_output(&mut self, v: String) {
+        self.output = Some(v)
+    }
+
+    pub fn get_output(&self) -> Option<String> {
+        self.output.clone()
     }
 }
 

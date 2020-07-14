@@ -91,7 +91,8 @@ fn start_request_thread(baseuri: &str) -> Handle {
 struct Tile {
     width: usize,
     pid: u64,
-    last_pc: Option<(Rc<str>,usize)>
+    last_pc: Option<(Rc<str>,usize)>,
+    buffer: String
 }
 
 struct TileRow {
@@ -148,7 +149,7 @@ impl Tiler {
     fn try_draw_process(&self, window: &Window, x: usize, y: usize,
                         min_width: usize, min_height: usize,
                         max_width: usize, max_height: usize,
-                        pid: u64, last_pc: &Option<(Rc<str>,usize)>)
+                        pid: u64, last_tile: Option<&mut Tile>)
                         -> Option<(usize, Tile)> {
 
         let proc = match self.state.procs.get(&pid) {
@@ -165,12 +166,23 @@ impl Tiler {
             return None;
         }
 
-        let last_pc = last_pc.as_ref().and_then(|(t,p)|
-            if Rc::ptr_eq(&t, text) {
-                Some(*p)
-            } else {
-                None
-            });
+        let (last_pc, mut buffer) = match last_tile {
+            Some(t) => {
+                let last_pc = match t.last_pc.as_ref() {
+                    Some((txt, p)) => {
+                        if Rc::ptr_eq(&txt, text) {
+                            Some(*p)
+                        } else {
+                            None
+                        }
+                    }
+                    None => None
+                };
+                (last_pc, mem::take(&mut t.buffer))
+            },
+            None => (None, String::new())
+        };
+
         let mut dy = 0;
         for (i, ch) in text.chars().enumerate() {
             let mut s = String::new();
@@ -196,14 +208,27 @@ impl Tiler {
             }
         }
 
+        let pid_str = format!("{:X}", pid);
+        let max_buf = display_width - pid_str.len() - 1;
+        if let Some(s) = &proc.output {
+            buffer.push_str(s);
+            while buffer.len() > max_buf {
+                //This is bad
+                buffer.remove(0);
+            }
+        }
+
         window.color_set(2);
-        window.mvaddstr((y + height - 2) as i32, x as i32,
-                        format!("{:X}", pid));
+        window.mvaddstr((y + height - 2) as i32, x as i32, &pid_str);
+        window.color_set(6);
+        window.mvaddstr((y + height - 2) as i32, (x + pid_str.len()) as i32,
+                        &buffer);
         window.color_set(0);
 
         Some((height, Tile { width: display_width,
                              pid: pid,
-                             last_pc: Some((Rc::clone(text), proc.pc)) }))
+                             last_pc: Some((Rc::clone(text), proc.pc)),
+                             buffer: buffer }))
     }
 
     fn draw(&mut self, window: &Window) {
@@ -233,31 +258,29 @@ impl Tiler {
         window.mvaddstr(maxy - 2, 0, self.errors.clone());
         window.color_set(0);
 
+        let active = mem::take(&mut self.active);
         let mut unused = self.state.procs.keys()
-                                         .filter(|k| !self.active.contains(k))
+                                         .filter(|k| !active.contains(k))
                                          .take(20);
-        
-        let mut new_rows = Vec::new();
-        let mut new_active = HashSet::new();
-
-        let mut old_rows = self.rows.iter();
+        let mut rows = mem::take(&mut self.rows);
+        let mut old_rows = rows.iter_mut();
 
         let maxy = maxy - 2;
 
         'outer: while y < maxy {
             let mut x = minx;
 
-            if let Some(row) = old_rows.next() {
+            if let Some(mut row) = old_rows.next() {
                 let mut new_tiles = Vec::new();
-                for tile in &row.tiles {
+                for tile in row.tiles.iter_mut() {
                     if let Some((_height, t)) =
                         self.try_draw_process(window, x as usize, y as usize,
                                               tile.width, row.height,
                                               tile.width, row.height,
-                                              tile.pid, &tile.last_pc) {
+                                              tile.pid, Some(tile)) {
                         x += t.width as i32;
                         new_tiles.push(t);
-                        new_active.insert(tile.pid);
+                        self.active.insert(tile.pid);
                     }
                 }
 
@@ -269,9 +292,9 @@ impl Tiler {
                                                   0, row.height,
                                                   (maxx - x) as usize, 
                                                   row.height, *pid,
-                                                  &None)) {
+                                                  None)) {
                         x += t.width as i32;
-                        new_active.insert(t.pid);
+                        self.active.insert(t.pid);
                         new_tiles.push(t);
                     } else {
                         break 'append;
@@ -279,8 +302,8 @@ impl Tiler {
                 }
 
                 if !new_tiles.is_empty() {
-                    new_rows.push(TileRow { height: row.height,
-                                            tiles: new_tiles });
+                    self.rows.push(TileRow { height: row.height,
+                                             tiles: new_tiles });
                     
                     y += row.height as i32;
                 }
@@ -293,10 +316,10 @@ impl Tiler {
                                           0, 0,
                                           (maxx - x) as usize, 
                                           (maxy - y) as usize, *pid,
-                                          &None) {
-                    new_rows.push(TileRow { height: height,
-                                            tiles: vec![t] });
-                    new_active.insert(*pid);
+                                          None) {
+                    self.rows.push(TileRow { height: height,
+                                             tiles: vec![t] });
+                    self.active.insert(*pid);
                     y += height as i32;
                 }
 
@@ -306,9 +329,6 @@ impl Tiler {
             }
 
         }
-
-        self.rows = new_rows;
-        self.active = new_active;
 
         window.refresh();
         self.needs_redraw = false;
@@ -343,6 +363,7 @@ fn main() {
         init_pair(3, pancurses::COLOR_BLACK, pancurses::COLOR_CYAN);
         init_pair(4, pancurses::COLOR_BLACK, pancurses::COLOR_BLUE);
         init_pair(5, pancurses::COLOR_BLACK, pancurses::COLOR_YELLOW);
+        init_pair(6, pancurses::COLOR_BLACK, pancurses::COLOR_GREEN);
     }
     window.nodelay(true);
     let mut done = false;
