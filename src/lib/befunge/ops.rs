@@ -34,6 +34,8 @@ impl OpSet {
         ops[59] = Some(make_op!(r#return)); // ;
         ops[64] = Some(make_op!(quit)); // @
 
+        ops[34] = Some(make_op!(quote)); // "
+
         for i in 0..=9 { // 0 - 9
             ops[i as usize + 48] = Some(push_int(i));
         }
@@ -102,6 +104,10 @@ impl OpSet {
 
 fn noop(proc: &mut Process) {
 
+}
+
+fn quote(proc: &mut Process) {
+    proc.set_state(ProcessState::Running(true));
 }
 
 fn push_int(i: u8) -> Op {

@@ -35,8 +35,8 @@ pub struct Engine {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventLog {
     NewProcess(u64),
-    ProcessPrintChar(u64, u8),
-    ProcessPrintNum(u64, u8),
+    PrintChar(u64, u8),
+    PrintNum(u64, u8),
     Play(Note),
     Finished(u64),
     Crashed(u64, &'static str),
@@ -88,7 +88,20 @@ impl Engine {
         for pid in active.iter() {
             let proc = self.procs.get_mut(pid).expect(
                 &format!("Lost pid: {}", pid));
-            self.ops.apply_to(proc, None);
+            match proc.state() {
+                ProcessState::Running(true) => {
+                    match proc.peek() {
+                        None => proc.die("Proc ran out of bounds"),
+                        Some(34) => proc.set_state(
+                            ProcessState::Running(false)),
+                        Some(c) => proc.push(c)
+                    }
+                },
+                ProcessState::Running(false) => {
+                    self.ops.apply_to(proc, None);
+                },
+                _ => panic!("Process in active list is not running")
+            }
         }
 
         for &(pid, c) in sleeping.iter() {
@@ -208,12 +221,12 @@ impl Engine {
                         next_active.push(proc.pid);
                     },
                     ProcessState::Trap(Syscall::PrintChar(c)) => {
-                        log.push(EventLog::ProcessPrintChar(proc.pid, *c));
+                        log.push(EventLog::PrintChar(proc.pid, *c));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
                     ProcessState::Trap(Syscall::PrintNum(c)) => {
-                        log.push(EventLog::ProcessPrintNum(proc.pid, *c));
+                        log.push(EventLog::PrintNum(proc.pid, *c));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
@@ -294,7 +307,7 @@ mod tests {
             eng.step();
         }
         assert!(eng.step().1 == vec![EventLog::Finished(1)]);
-        assert!(eng.step().1 == vec![EventLog::ProcessPrintNum(2, 5)]);
+        assert!(eng.step().1 == vec![EventLog::PrintNum(2, 5)]);
         assert!(eng.step().1 == vec![EventLog::Finished(2)]);
     }
 }
