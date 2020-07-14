@@ -212,15 +212,15 @@ impl Tiler {
         let max_buf = display_width - pid_str.len() - 1;
         if let Some(s) = &proc.output {
             buffer.push_str(s);
-            while buffer.len() > max_buf {
-                //This is bad
-                buffer.remove(0);
+            let buf_len = buffer.chars().count();
+            if buf_len > max_buf {
+                buffer = buffer.chars().skip(buf_len - max_buf).collect()
             }
         }
 
-        window.color_set(2);
-        window.mvaddstr((y + height - 2) as i32, x as i32, &pid_str);
         window.color_set(6);
+        window.mvaddstr((y + height - 2) as i32, x as i32, &pid_str);
+        window.color_set(2);
         window.mvaddstr((y + height - 2) as i32, (x + pid_str.len()) as i32,
                         &buffer);
         window.color_set(0);
