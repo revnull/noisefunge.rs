@@ -363,7 +363,7 @@ fn main() {
         init_pair(3, pancurses::COLOR_BLACK, pancurses::COLOR_CYAN);
         init_pair(4, pancurses::COLOR_BLACK, pancurses::COLOR_BLUE);
         init_pair(5, pancurses::COLOR_BLACK, pancurses::COLOR_YELLOW);
-        init_pair(6, pancurses::COLOR_BLACK, pancurses::COLOR_GREEN);
+        init_pair(6, pancurses::COLOR_BLACK, pancurses::COLOR_MAGENTA);
     }
     window.nodelay(true);
     let mut done = false;
