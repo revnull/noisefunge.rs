@@ -95,7 +95,7 @@ pub struct ProcessStack {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Syscall {
     Fork,
-    Sleep(u8),
+    Sleep(u32),
     Pause,
     PrintChar(u8),
     PrintNum(u8),
@@ -104,6 +104,7 @@ pub enum Syscall {
     Defop(u8),
     Call(u8),
     Play(Note),
+    Quantize(u8),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -295,6 +296,10 @@ impl Process {
 
     pub fn get_note(&self) -> &Note {
         &self.note
+    }
+
+    pub fn get_mut_note(&mut self) -> &mut Note {
+        &mut self.note
     }
 
     pub fn clear_output(&mut self) {

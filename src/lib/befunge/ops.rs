@@ -63,6 +63,8 @@ impl OpSet {
 
         ops[102] = Some(make_op!(fork)); // f
         ops[115] = Some(make_op!(sleep)); // s
+        ops[113] = Some(make_op!(quantize)); // q
+        ops[81] = Some(make_op!(quantize_n)); // Q
 
         ops[36] = Some(make_op!(chomp)); // $
         ops[58] = Some(make_op!(dup)); // :
@@ -80,6 +82,14 @@ impl OpSet {
 
         ops[90] = Some(make_op!(play)); // Z
         ops[122] = Some(make_op!(writebuf)); // z
+        ops[117] = Some(make_op!(writebuf_dur)); // u
+        ops[119] = Some(make_op!(writebuf_vel)); // w
+        ops[120] = Some(make_op!(writebuf_pch)); // x
+        ops[121] = Some(make_op!(writebuf_cha)); // y
+        ops[85] = Some(make_op!(readbuf_dur)); // U
+        ops[87] = Some(make_op!(readbuf_vel)); // W
+        ops[88] = Some(make_op!(readbuf_pch)); // X
+        ops[89] = Some(make_op!(readbuf_cha)); // Y
 
         OpSet(ops)
     }
@@ -144,7 +154,20 @@ fn rand_direction(proc: &mut Process) {
 
 fn sleep(proc: &mut Process) {
     let beats = pop!(proc);
-    proc.trap(Syscall::Sleep(beats));
+    proc.trap(Syscall::Sleep(beats as u32));
+}
+ 
+fn quantize(proc: &mut Process) {
+    proc.trap(Syscall::Quantize(1));
+}
+ 
+fn quantize_n(proc: &mut Process) {
+    let q = pop!(proc);
+    if q == 0 {
+        proc.die("Can't quantize on 0 beats.");
+    } else {
+        proc.trap(Syscall::Quantize(q));
+    }
 }
  
 fn defop(proc: &mut Process) {
@@ -357,6 +380,42 @@ fn writebuf(proc: &mut Process) {
     let cha = pop!(proc);
 
     proc.set_note(Note { pch: pch, vel: vel, cha: cha, dur: dur });
+}
+
+fn writebuf_dur(proc: &mut Process) {
+    let dur = pop!(proc);
+    proc.get_mut_note().dur = dur;
+}
+
+fn writebuf_vel(proc: &mut Process) {
+    let vel = pop!(proc);
+    proc.get_mut_note().vel = vel;
+}
+
+fn writebuf_pch(proc: &mut Process) {
+    let pch = pop!(proc);
+    proc.get_mut_note().pch = pch;
+}
+
+fn writebuf_cha(proc: &mut Process) {
+    let cha = pop!(proc);
+    proc.get_mut_note().cha = cha;
+}
+
+fn readbuf_dur(proc: &mut Process) {
+    proc.push(proc.get_note().dur);
+}
+
+fn readbuf_vel(proc: &mut Process) {
+    proc.push(proc.get_note().vel);
+}
+
+fn readbuf_pch(proc: &mut Process) {
+    proc.push(proc.get_note().pch);
+}
+
+fn readbuf_cha(proc: &mut Process) {
+    proc.push(proc.get_note().cha);
 }
 
 fn play(proc: &mut Process) {

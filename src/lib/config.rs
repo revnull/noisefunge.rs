@@ -64,6 +64,9 @@ impl FungedConfig {
         let port = settings.get_int("port").expect("Port not set") as u16;
         let bi = settings.get_str("beats_in").expect("Beats in not found.");
         let period = settings.get_int("period").unwrap();
+        if 24 % period != 0 {
+            panic!("Period must be one of: 1,2,3,4,6,8,12,24");
+        }
 
         let mut locals = HashSet::new();
         let mut channels = arr![None; 256];

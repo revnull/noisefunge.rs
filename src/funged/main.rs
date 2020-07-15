@@ -34,7 +34,7 @@ struct FungedServer {
 impl FungedServer {
 
     fn new(conf: FungedConfig) -> Self {
-        let engine = Engine::new();
+        let engine = Engine::new(conf.period);
         let state = engine.state();
         let state_vec = Arc::new(to_vec(&state).unwrap());
         FungedServer {

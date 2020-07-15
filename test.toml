@@ -29,8 +29,8 @@ starting = 64
 program = 0
 
 [channel.1]
-program = 5
+program = 0
 
 [channel.18]
-bank = 128
+bank = 0
 program = 0

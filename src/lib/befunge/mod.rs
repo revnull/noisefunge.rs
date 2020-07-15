@@ -22,12 +22,13 @@ enum MessageQueue {
 
 pub struct Engine {
     beat: u64,
+    freq: u64,
     next_pid: u64,
     progs: HashSet<Rc<Prog>>,
     procs: BTreeMap<u64,Process>,
     buffers: [MessageQueue; 256],
     active: Vec<u64>,
-    sleeping: Vec<(u64, u8)>,
+    sleeping: Vec<(u64, u32)>,
     ops: OpSet,
     charmap: CharMap,
 }
@@ -43,8 +44,9 @@ pub enum EventLog {
 }
 
 impl Engine {
-    pub fn new() -> Engine {
+    pub fn new(period: u64) -> Engine {
         Engine { beat: 0,
+                 freq: 24 / period,
                  next_pid: 1,
                  progs: HashSet::new(),
                  procs: BTreeMap::new(),
@@ -145,6 +147,21 @@ impl Engine {
                         } else {
                             self.sleeping.push((proc.pid, dur - 1));
                         }
+                    },
+                    ProcessState::Trap(Syscall::Quantize(q)) => {
+                        let mut q = *q as u64;
+                        let quarter = self.beat / self.freq;
+                        let needed = match quarter % q {
+                            0 => 0,
+                            n => q - n
+                        };
+                        let sub = match self.beat % self.freq {
+                            0 => 0,
+                            n => self.freq - n
+                        };
+                        let n = ((needed * self.freq) + sub) as u32;
+                        proc.set_state(ProcessState::Trap(Syscall::Sleep(n)));
+                        next_active.push(proc.pid);
                     },
                     ProcessState::Trap(Syscall::Pause) => {
                         proc.resume(None);
@@ -300,7 +317,7 @@ mod tests {
 
     #[test]
     fn send_receive_basic() {
-        let mut eng = Engine::new();
+        let mut eng = Engine::new(24);
         eng.make_process(Prog::parse(">  50.@")
             .expect("Parse failed."));
         eng.make_process(Prog::parse(">0~ &@")
