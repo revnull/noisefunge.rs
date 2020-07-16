@@ -303,9 +303,21 @@ impl Engine {
                                            output: proc.get_output() });
         }
 
+        let mut buffers = BTreeMap::new();
+        for i in 0..=255 {
+            let buf = &self.buffers[i];
+            let len = match buf {
+                MessageQueue::Empty => { continue }
+                MessageQueue::ReadBlocked(q) => { -(q.len() as i64) },
+                MessageQueue::WriteBlocked(q) => { q.len() as i64 },
+            };
+            buffers.insert(i as u8, len);
+        }
+
         EngineState { beat: self.beat,
                       progs: progs,
-                      procs: procs
+                      procs: procs,
+                      buffers: buffers
                     }
     }
 
