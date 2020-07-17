@@ -101,9 +101,6 @@ fn main() {
                     if j % server.config.period == 0 {
                         let (beat, log) = server.engine.step();
                         bridge.step(beat, &log);
-                        for n in log {
-                            println!("log: {:?}", n);
-                        };
                     }
                 };
                 server.update_state();
