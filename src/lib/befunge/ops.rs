@@ -195,6 +195,10 @@ impl OpSet {
         self.0[c as usize] = Some(op);
     }
 
+    pub fn lookup(&self, c: u8) -> Option<&Op> {
+        self.0[c as usize].as_ref()
+    }
+
 }
 
 fn noop(proc: &mut Process) {

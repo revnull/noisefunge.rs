@@ -24,6 +24,10 @@ path = "src/nfbuffer/main.rs"
 name = "nfloader"
 path = "src/nfloader/main.rs"
 
+[[bin]]
+name = "nfops"
+path = "src/nfops/main.rs"
+
 [dependencies]
 rand = "0.7"
 jack = "0.6"
