@@ -131,9 +131,28 @@ fn main() {
                 y += 1;
             }
             if let Some(st) = state.as_ref() {
-                let mut buffers = st.buffers.iter().map(|(k,v)| (*k, *v))
-                                            .collect::<Vec<(u8,i64)>>();
+                let mut rcount = 0;
+                let mut wcount = 0;
+                let active = st.procs.iter().filter(|p| p.1.active).count();
+                let sleeping = st.sleeping;
+
+                let mut buffers =
+                    st.buffers.iter().map(|(k,v)| {
+                        if *v < 0 {
+                            rcount += v.abs();
+                        } else {
+                            wcount += v;
+                        }
+                        (*k, *v)
+                        }).collect::<Vec<(u8,i64)>>();
                 buffers.sort_by(|(_,a),(_,b)| b.abs().cmp(&a.abs()));
+
+                window.mvaddstr(y, 0,
+                                format!("{:<8} A:{:6} S:{:6} R{:6} W{:6}",
+                                        st.beat, active, sleeping,
+                                        rcount, wcount));
+                y += 1;
+
                 for (id, size) in buffers {
                     if y == maxy {
                         break;

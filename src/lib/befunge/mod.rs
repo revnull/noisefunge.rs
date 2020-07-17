@@ -321,6 +321,7 @@ impl Engine {
         EngineState { beat: self.beat,
                       progs: progs,
                       procs: procs,
+                      sleeping: self.sleeping.len(),
                       buffers: buffers
                     }
     }

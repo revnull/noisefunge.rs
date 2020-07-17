@@ -23,6 +23,7 @@ pub struct EngineState {
     pub beat: u64,
     pub progs: Vec<(usize, String)>,
     pub procs: HashMap<u64, ProcState>,
+    pub sleeping: usize,
     pub buffers: BTreeMap<u8, i64>
 }
 
@@ -32,6 +33,7 @@ impl EngineState {
             beat: 0,
             progs: Vec::new(),
             procs: HashMap::new(),
+            sleeping: 0,
             buffers: BTreeMap::new()
         }
     }
