@@ -20,6 +20,10 @@ path = "src/nfviewer/main.rs"
 name = "nfbuffer"
 path = "src/nfbuffer/main.rs"
 
+[[bin]]
+name = "nfloader"
+path = "src/nfloader/main.rs"
+
 [dependencies]
 rand = "0.7"
 jack = "0.6"

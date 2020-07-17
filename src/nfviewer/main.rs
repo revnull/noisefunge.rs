@@ -18,10 +18,12 @@ fn read_args() -> String {
                           .arg(Arg::with_name("HOST")
                                .help("Noisefunge server host")
                                .required(false)
+                               .env("NOISEFUNGE_HOST")
                                .default_value("localhost"))
                           .arg(Arg::with_name("PORT")
                                .help("Noisefunge server port")
                                .required(false)
+                               .env("NOISEFUNGE_PORT")
                                .default_value("1312"))
                           .get_matches();
 
@@ -56,7 +58,7 @@ fn start_request_thread(baseuri: &str) -> Handle {
                                 .query(&[("prev", prev.to_string())])
                                 .timeout(Duration::from_secs(4))
                                 .build()
-                                .expect("Failed to build client");
+                                .expect("Failed to build request");
             let response = client.execute(request);
             let msg = match response {
                 Ok(response) => {

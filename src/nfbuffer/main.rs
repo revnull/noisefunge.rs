@@ -12,14 +12,16 @@ use std::time::Duration;
 use std::collections::BTreeMap;
 
 fn read_args() -> String {
-    let matches = App::new("nfviewer")
+    let matches = App::new("nfbuffer")
                           .arg(Arg::with_name("HOST")
                                .help("Noisefunge server host")
                                .required(false)
+                               .env("NOISEFUNGE_HOST")
                                .default_value("localhost"))
                           .arg(Arg::with_name("PORT")
                                .help("Noisefunge server port")
                                .required(false)
+                               .env("NOISEFUNGE_PORT")
                                .default_value("1312"))
                           .get_matches();
 
