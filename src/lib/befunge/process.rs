@@ -107,12 +107,12 @@ pub enum Syscall {
     Quantize(u8),
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ProcessState {
     Running(bool),
     Trap(Syscall),
     Finished,
-    Crashed(&'static str),
+    Crashed(String),
 }
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -208,8 +208,10 @@ impl Process {
         self.data_stack.pop()
     }
 
-    pub fn die(&mut self, msg: &'static str) {
-        self.state = ProcessState::Crashed(msg)
+    pub fn die<T>(&mut self, msg: T)
+        where T: ToString
+    {
+        self.state = ProcessState::Crashed(msg.to_string())
     }
 
     pub fn set_direction(&mut self, dir: Dir) {
@@ -274,7 +276,7 @@ impl Process {
     }
 
     pub fn apply(&mut self, op: &Op) {
-        let Op(ref f) = op;
+        let f = &op.function;
         f(self)
     }
 
@@ -316,11 +318,24 @@ impl Process {
 }
 
 #[derive(Clone)]
-pub struct Op(Rc<dyn Fn(&mut Process)>);
+pub struct Op {
+    pub function: Rc<dyn Fn(&mut Process)>,
+    pub opcode: u8,
+    pub name: String,
+    pub description: String
+}
 
 impl Op {
-    pub fn new(f: Rc<dyn Fn(&mut Process)>) -> Self {
-        Op(f)
+    pub fn new<S,T>(f: Rc<dyn Fn(&mut Process)>, opcode: u8, name: S,
+               description: T) -> Self
+        where S: ToString, T: ToString
+    {
+        Op {
+            function: f,
+            opcode: opcode,
+            name: name.to_string(),
+            description: description.to_string()
+        }
     }
 }
 

@@ -40,7 +40,7 @@ pub enum EventLog {
     PrintNum(u64, u8),
     Play(Note),
     Finished(u64),
-    Crashed(u64, &'static str),
+    Crashed(u64, String),
 }
 
 impl Engine {
@@ -53,7 +53,7 @@ impl Engine {
                  buffers: arr![MessageQueue::Empty; 256],
                  active: Vec::new(),
                  sleeping: Vec::new(),
-                 ops: OpSet::new(),
+                 ops: OpSet::default(),
                  charmap: CharMap::default() }
     }
 
@@ -233,9 +233,12 @@ impl Engine {
                         let mem = Rc::clone(&top.memory);
                         log.push(EventLog::Finished(proc.pid));
                         dead.push(proc.pid);
-                        self.ops.defop(*c, Op::new(Rc::new( move |p| {
-                            p.call(Rc::clone(&mem), pc, dir);
-                        })));
+                        self.ops.defop(*c,
+                            Op::new(Rc::new( move |p| {
+                                             p.call(Rc::clone(&mem), pc, dir);
+                                             }),
+                                    *c, format!("User opcode {:X}", *c),
+                                    "User defined opcode"));
                     },
                     ProcessState::Trap(Syscall::Call(c)) => {
                         self.ops.apply_to(proc, Some(*c));
@@ -264,7 +267,7 @@ impl Engine {
                         dead.push(proc.pid);
                     },
                     ProcessState::Crashed(msg) => {
-                        log.push(EventLog::Crashed(proc.pid, msg));
+                        log.push(EventLog::Crashed(proc.pid, msg.clone()));
                         dead.push(proc.pid);
                     }
                     s => panic!("Unhandled state: {:?}", s),
@@ -340,10 +343,10 @@ mod tests {
         eng.make_process(Prog::parse(">0~ &@")
             .expect("Parse failed."));
         for i in 1..7  {
-            eng.step();
+            assert_eq!(eng.step().1, vec![]);
         }
-        assert!(eng.step().1 == vec![EventLog::Finished(1)]);
-        assert!(eng.step().1 == vec![EventLog::PrintNum(2, 5)]);
-        assert!(eng.step().1 == vec![EventLog::Finished(2)]);
+        assert_eq!(eng.step().1, vec![EventLog::Finished(1)]);
+        assert_eq!(eng.step().1, vec![EventLog::PrintNum(2, 5)]);
+        assert_eq!(eng.step().1, vec![EventLog::Finished(2)]);
     }
 }

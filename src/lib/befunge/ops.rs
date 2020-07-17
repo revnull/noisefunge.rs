@@ -17,82 +17,166 @@ macro_rules! pop {
 }
 
 macro_rules! make_op {
-    ($fn : expr) => { Op::new(Rc::new($fn)) }
+    ($code: expr, $name: expr, $desc: expr, $func: expr) => {
+        Op::new(Rc::new($func), $code, $name, $desc)
+    }
 }
 
 pub struct OpSet([Option<Op>; 256]);
 
 impl OpSet {
-    pub fn new() -> OpSet {
-        let mut ops : [Option<Op>; 256] = arr![None;256];
-        ops[32] = Some(make_op!(noop)); // Space
-        ops[60] = Some(set_direction(Dir::L)); // >
-        ops[62] = Some(set_direction(Dir::R)); // <
-        ops[94] = Some(set_direction(Dir::U)); // ^
-        ops[118] = Some(set_direction(Dir::D)); // v
-        ops[63] = Some(make_op!(rand_direction)); // ?
-        ops[59] = Some(make_op!(r#return)); // ;
-        ops[64] = Some(make_op!(quit)); // @
+    pub fn new() -> Self {
+        OpSet(arr![None; 256])
+    }
 
-        ops[34] = Some(make_op!(quote)); // "
+    pub fn default() -> Self {
+        let mut ops = OpSet::new();
+        ops.insert_safe(make_op!(32, "Noop", "No operation", noop));
 
-        for i in 0..=9 { // 0 - 9
-            ops[i as usize + 48] = Some(push_int(i));
+        ops.insert_safe(set_direction(Dir::L));
+        ops.insert_safe(set_direction(Dir::R));
+        ops.insert_safe(set_direction(Dir::U));
+        ops.insert_safe(set_direction(Dir::D));
+        ops.insert_safe(
+            make_op!(63, "Rand(Dir)", "Change to random direction.",
+                     rand_direction));
+
+        ops.insert_safe(make_op!(34, "Quote", "Start/Stop quote mode", quote));
+
+        ops.insert_safe(make_op!(64, "Quit", "Terminate the program", quit));
+
+        for i in 0..=15 { // 0 - F
+            ops.insert_safe(push_int(i));
         }
-        for i in 0..=5 { // A - F
-            ops[i as usize + 65] = Some(push_int(10 + i));
+        ops.insert_safe(
+            make_op!(104, "Hex Byte", "Pop x and y. Push (x*16)+y.",
+                     hex_byte));
+
+
+        ops.insert_safe(
+            make_op!(37, "Modulo", "Pop x and y. Push y % x.", r#mod));
+        ops.insert_safe(
+            make_op!(42, "Multiply", "Pop x and y. Push y * x.", mul));
+        ops.insert_safe(
+            make_op!(43, "Add", "Pop x and y. Push y + x.", add));
+        ops.insert_safe(
+            make_op!(45, "Subtract", "Pop x and y. Push y - x.", sub));
+        ops.insert_safe(
+            make_op!(47, "Divide", "Pop x and y. Push y / x.", div));
+
+        ops.insert_safe(
+            make_op!(33, "Not", "Pop x. If x = 0, push 1, or else 0.", not));
+        ops.insert_safe(
+            make_op!(61, "Equal",
+                     "Pop x and y. If y = x, push 1, or else 0.", eq));
+        ops.insert_safe(
+            make_op!(96, "Greater",
+                     "Pop x and y. If y > x, push 1, or else 0.", gt));
+        ops.insert_safe(
+            make_op!(95, "Cond(H)",
+                     "Pop x. If x is 0, go right, or else left.", cond_h));
+        ops.insert_safe(
+            make_op!(124, "Cond(V)",
+                     "Pop x. If x is 0, go down, or else up.", cond_v));
+        ops.insert_safe(
+            make_op!(39, "CondJump", "Pop x. If x != 0, jump.", cond_jump));
+
+        ops.insert_safe(
+            make_op!(46, "Send", "Pop c and x. Send c to channel x.", send));
+        ops.insert_safe(
+            make_op!(126, "Receive",
+                     "Pop c. Read from channel c and push result.", receive));
+        ops.insert_safe(
+            make_op!(38, "Print(Byte)",
+                     "Pop x. Print x as a hex byte.", print_byte));
+        ops.insert_safe(
+            make_op!(44, "Print(Char)",
+                     "Pop x. Print x as character.", print_char));
+
+        ops.insert_safe(
+            make_op!(102, "Fork",
+                     "Fork thread. Push 1 for child, 0 for parent.", fork));
+        ops.insert_safe(
+            make_op!(115, "Sleep", "Pop x. Sleep for x subbeats.", sleep));
+        ops.insert_safe(
+            make_op!(113, "Quantize", "Sleep until the next full beat.",
+                     quantize));
+        ops.insert_safe(
+            make_op!(81, "QuantizeN",
+                     "Pop x. Sleep until full beat divisible by x.",
+                     quantize_n));
+
+        ops.insert_safe(
+            make_op!(36, "Chomp", "Discard value at top of stack.", chomp));
+        ops.insert_safe(
+            make_op!(58, "Dup", "Duplicate value at top of stack.", dup));
+        ops.insert_safe(
+            make_op!(92, "Swap", "Pop x and y. Push x and y.", swap));
+
+        ops.insert_safe(
+            make_op!(91, "Defop", "Define user opcode.", defop));
+        ops.insert_safe(
+            make_op!(93, "Return", "Return from user opcode.", r#return));
+
+        ops.insert_safe(
+            make_op!(101, "Execute", "Pop x. Execute it as an opcode.",
+                     execute));
+        ops.insert_safe(
+            make_op!(99, "Call", "Pop y and x. Call opcode at (y, x).", call));
+        ops.insert_safe(
+            make_op!(71, "Goto", "Pop y and x. Go to position (y, x).", goto));
+        ops.insert_safe(
+            make_op!(35, "Jump", "Skip over next position.", jump));
+        ops.insert_safe(
+            make_op!(112, "Put", "Pop y, x, and c. Write c to position (y, x)",
+                     put));
+        ops.insert_safe(
+            make_op!(103, "Get",
+                     "Pop y and x. Push value from (y, x) onto stack.", get));
+
+        ops.insert_safe(
+            make_op!(90, "Play", "Play note in note buffer.", play));
+        ops.insert_safe(
+            make_op!(122, "Write(Note)",
+                     "Pop dur, vel, pch, cha. Write note buffer.", writebuf));
+        ops.insert_safe(
+            make_op!(117, "Write(Dur)",
+                     "Pop x. Write x as note buffer duration.", writebuf_dur));
+        ops.insert_safe(
+            make_op!(119, "Write(Vel)",
+                     "Pop x. Write x as note buffer velocity.", writebuf_vel));
+        ops.insert_safe(
+            make_op!(120, "Write(Pch)",
+                     "Pop x. Write x as note buffer pitch.", writebuf_pch));
+        ops.insert_safe(
+            make_op!(121, "Write(Cha)",
+                     "Pop x. Write x as note buffer channel.", writebuf_cha));
+        ops.insert_safe(
+            make_op!(85, "Read(Dur)", "Push note buffer duration.",
+                     readbuf_dur));
+        ops.insert_safe(
+            make_op!(87, "Read(Vel)", "Push note buffer velocity.",
+                     readbuf_vel));
+        ops.insert_safe(
+            make_op!(88, "Read(Pch)", "Push note buffer pitch.",
+                     readbuf_pch));
+        ops.insert_safe(
+            make_op!(89, "Read(Cha)", "Push note buffer channel.",
+                     readbuf_cha));
+
+        ops
+    }
+
+    pub fn insert(&mut self, op: Op) {
+        let i = op.opcode as usize;
+        self.0[i] = Some(op)
+    }
+
+    fn insert_safe(&mut self, op: Op) {
+        if self.0[op.opcode as usize].is_some() {
+            panic!(format!("Duplicate opcode for {:X}", op.opcode));
         }
-        ops[104] = Some(make_op!(hex_byte)); // h
-
-        ops[37] = Some(make_op!(r#mod)); // %
-        ops[42] = Some(make_op!(mul)); // *
-        ops[43] = Some(make_op!(add)); // +
-        ops[45] = Some(make_op!(sub)); // -
-        ops[47] = Some(make_op!(div)); // /
-        ops[33] = Some(make_op!(not)); // !
-        ops[61] = Some(make_op!(eq)); // !
-        ops[96] = Some(make_op!(gt)); // `
-
-        ops[95] = Some(make_op!(cond_h)); // _
-        ops[124] = Some(make_op!(cond_v)); // |
-        ops[39] = Some(make_op!(cond_jump)); // '
-
-        ops[46] = Some(make_op!(send)); // .
-        ops[126] = Some(make_op!(receive)); // ~
-        ops[38] = Some(make_op!(print_byte)); // &
-        ops[44] = Some(make_op!(print_char)); // ,
-
-        ops[102] = Some(make_op!(fork)); // f
-        ops[115] = Some(make_op!(sleep)); // s
-        ops[113] = Some(make_op!(quantize)); // q
-        ops[81] = Some(make_op!(quantize_n)); // Q
-
-        ops[36] = Some(make_op!(chomp)); // $
-        ops[58] = Some(make_op!(dup)); // :
-        ops[92] = Some(make_op!(swap)); // \
-
-        ops[91] = Some(make_op!(defop)); // [
-        ops[93] = Some(make_op!(r#return)); // ]
-        ops[99] = Some(make_op!(call)); // c
-        ops[101] = Some(make_op!(execute)); // e
-        ops[71] = Some(make_op!(goto)); // G
-        ops[35] = Some(make_op!(jump)); // #
-
-        ops[112] = Some(make_op!(put)); // p
-        ops[103] = Some(make_op!(get)); // g
-
-        ops[90] = Some(make_op!(play)); // Z
-        ops[122] = Some(make_op!(writebuf)); // z
-        ops[117] = Some(make_op!(writebuf_dur)); // u
-        ops[119] = Some(make_op!(writebuf_vel)); // w
-        ops[120] = Some(make_op!(writebuf_pch)); // x
-        ops[121] = Some(make_op!(writebuf_cha)); // y
-        ops[85] = Some(make_op!(readbuf_dur)); // U
-        ops[87] = Some(make_op!(readbuf_vel)); // W
-        ops[88] = Some(make_op!(readbuf_pch)); // X
-        ops[89] = Some(make_op!(readbuf_cha)); // Y
-
-        OpSet(ops)
+        self.insert(op)
     }
 
     pub fn apply_to(&self, proc: &mut Process, o: Option<u8>) {
@@ -102,7 +186,7 @@ impl OpSet {
             Some(c) => c
         };
         match &ops[c as usize] {
-            None => { proc.die("Unknown op"); }
+            None => { proc.die(format!("Unknown op 0x{:X}", c)); }
             Some(op) => proc.apply(op)
         }
     }
@@ -122,10 +206,13 @@ fn quote(proc: &mut Process) {
 }
 
 fn push_int(i: u8) -> Op {
+    let opcode = if i < 10 { 48 + i } else { 65 + i };
+
     let push_i = move |proc: &mut Process| {
         proc.push(i);
     };
-    make_op!(push_i)
+    make_op!(opcode, format!("{:X}", i), format!("Push {} onto the stack", i),
+             push_i)
 }
 
 fn hex_byte(proc: &mut Process) {
@@ -135,10 +222,16 @@ fn hex_byte(proc: &mut Process) {
 }
 
 fn set_direction(dir: Dir) -> Op {
+    let (opcode, name) = match dir {
+        Dir::U => (94, "Up"),
+        Dir::D => (118, "Down"),
+        Dir::L => (60, "Left"),
+        Dir::R => (62, "Right"),
+    };
     let set_dir = move |proc: &mut Process| {
         proc.set_direction(dir);
     };
-    make_op!(set_dir)
+    make_op!(opcode, name, format!("Change direction to {}", name), set_dir)
 }
 
 fn rand_direction(proc: &mut Process) {
@@ -279,7 +372,7 @@ fn jump(proc: &mut Process) {
 
 fn cond_jump(proc: &mut Process) {
     let x = pop!(proc);
-    if x == 0 {
+    if x != 0 {
         proc.step();
     }
 }
@@ -442,13 +535,13 @@ mod tests {
     fn test_noop() {
         let mut proc = demo_proc_1();
         proc.top_mut().map(|t| t.pc = PC(1));
-        let ops = OpSet::new();
+        let ops = OpSet::default();
         ops.apply_to(&mut proc, None);
         proc.step();
         let PC(i) = proc.top().expect("Empty top").pc;
-        assert!(i == 2, "PC != 2");
-        assert!(*proc.state() == ProcessState::Running(false),
-                "Process is not running.");
+        assert_eq!(i, 2, "PC != 2");
+        assert_eq!(*proc.state(), ProcessState::Running(false),
+                   "Process is not running.");
 
         // Rest of program plays out.
         for _ in 1..5 {
@@ -464,7 +557,7 @@ mod tests {
     #[test]
     fn test_math_ops() {
         let mut results = Vec::new();
-        let ops = OpSet::new();
+        let ops = OpSet::default();
         for i in 2..7 {
             let mut proc = demo_proc_1();
             proc.top_mut().map(|t| t.pc = PC(i * 6));
