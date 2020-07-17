@@ -126,7 +126,11 @@ impl Engine {
                 match proc.state() {
                     ProcessState::Running(_) => {
                         proc.step();
-                        self.active.push(proc.pid);
+                        match &proc.state() {
+                            ProcessState::Running(_) =>
+                                self.active.push(proc.pid),
+                            _ => dead.push(proc.pid),
+                        }
                     },
                     ProcessState::Trap(Syscall::Fork) => {
                         let pid = self.next_pid;

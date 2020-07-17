@@ -55,6 +55,7 @@ impl OpSet {
 
         ops[95] = Some(make_op!(cond_h)); // _
         ops[124] = Some(make_op!(cond_v)); // |
+        ops[39] = Some(make_op!(cond_jump)); // '
 
         ops[46] = Some(make_op!(send)); // .
         ops[126] = Some(make_op!(receive)); // ~
@@ -74,7 +75,7 @@ impl OpSet {
         ops[93] = Some(make_op!(r#return)); // ]
         ops[99] = Some(make_op!(call)); // c
         ops[101] = Some(make_op!(execute)); // e
-        ops[103] = Some(make_op!(goto)); // g
+        ops[71] = Some(make_op!(goto)); // G
         ops[35] = Some(make_op!(jump)); // #
 
         ops[112] = Some(make_op!(put)); // p
@@ -276,7 +277,7 @@ fn jump(proc: &mut Process) {
     proc.step();
 }
 
-fn condjump(proc: &mut Process) {
+fn cond_jump(proc: &mut Process) {
     let x = pop!(proc);
     if x == 0 {
         proc.step();
