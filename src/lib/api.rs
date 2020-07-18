@@ -38,3 +38,12 @@ impl EngineState {
         }
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KillReq {
+    pub pids: Vec<u64>
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KillResp { }
+

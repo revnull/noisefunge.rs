@@ -49,6 +49,7 @@ impl<T> Responder<T> {
 pub enum FungeRequest {
     StartProcess(String, Responder<Result<u64,String>>),
     GetState(Option<u64>, Responder<Option<Arc<Vec<u8>>>>),
+    Kill(Vec<u64>)
 }
 
 unsafe impl Send for FungeRequest {}
@@ -59,6 +60,14 @@ pub struct ServerHandle {
 }
 
 fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
+    let data : KillReq = try_or_400!(rouille::input::json_input(&request));
+    
+    sender.send(FungeRequest::Kill(data.pids));
+
+    Response::json(&KillResp { })
+}
+
+fn kill(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     let data = try_or_400!(rouille::input::plain_text_body(&request));
 
     let responder = Responder::new();
@@ -86,6 +95,7 @@ fn handle_request(sender: &Sender<FungeRequest>, request: &Request)
     router!(request,
         (GET) (/state) => { get_state(sender, request) },
         (POST) (/process) => { new_process(sender, request) },
+        (POST) (/kill) => { kill(sender, request) },
 
         _ => Response::empty_404()
     )

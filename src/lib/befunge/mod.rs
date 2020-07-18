@@ -29,6 +29,8 @@ pub struct Engine {
     buffers: [MessageQueue; 256],
     active: Vec<u64>,
     sleeping: Vec<(u64, u32)>,
+    all_killed: bool,
+    killed: HashSet<u64>,
     ops: OpSet,
     charmap: CharMap,
 }
@@ -41,6 +43,7 @@ pub enum EventLog {
     Play(Note),
     Finished(u64),
     Crashed(u64, String),
+    Killed(u64)
 }
 
 impl Engine {
@@ -53,6 +56,8 @@ impl Engine {
                  buffers: arr![MessageQueue::Empty; 256],
                  active: Vec::new(),
                  sleeping: Vec::new(),
+                 all_killed: false,
+                 killed: HashSet::new(),
                  ops: OpSet::default(),
                  charmap: CharMap::default() }
     }
@@ -61,6 +66,14 @@ impl Engine {
         let pid = self.next_pid;
         self.next_pid += 1;
         pid
+    }
+
+    pub fn kill(&mut self, pid: u64) {
+        self.killed.insert(pid);
+    }
+
+    pub fn kill_all(&mut self) {
+        self.all_killed = true
     }
 
     pub fn make_process(&mut self, prog: Prog) -> u64 {
@@ -86,6 +99,51 @@ impl Engine {
         let mut log = Vec::new();
         let sleeping = mem::take(&mut self.sleeping);
         let mut active = mem::take(&mut self.active);
+        let all_killed = self.all_killed;
+        self.all_killed = false;
+        let mut dead = Vec::new();
+        let killed = mem::take(&mut self.killed);
+        let oldbeat = self.beat;
+        self.beat += 1;
+
+        if all_killed {
+            for pid in self.procs.keys() {
+                log.push(EventLog::Killed(*pid));
+            }
+            self.procs = BTreeMap::new();
+            return (oldbeat, log)
+        }
+
+        let mut needs_filter = HashSet::new();
+        for pid in &killed {
+            let proc = self.procs.get_mut(&pid).expect(
+                &format!("Lost pid: {}", pid));
+            match proc.kill() {
+                ProcessState::Trap(Syscall::Send(ch, _)) => {
+                    needs_filter.insert(ch);
+                },
+                ProcessState::Trap(Syscall::Receive(ch)) => {
+                    needs_filter.insert(ch);
+                },
+                _ => ()
+            }
+        }
+
+        for ch in needs_filter {
+            let buf = &mut self.buffers[ch as usize];
+            let empty = match buf {
+                MessageQueue::ReadBlocked(ref mut v) => {
+                    v.retain(|ref p| !killed.contains(p));
+                    v.is_empty()
+                },
+                MessageQueue::WriteBlocked(ref mut v) => {
+                    v.retain(|(ref p, _)| !killed.contains(p));
+                    v.is_empty()
+                },
+                MessageQueue::Empty => { true } // should not happen.
+            };
+            if empty { *buf = MessageQueue::Empty }
+        }
 
         for pid in active.iter() {
             let proc = self.procs.get_mut(pid).expect(
@@ -103,6 +161,7 @@ impl Engine {
                 ProcessState::Running(false) => {
                     self.ops.apply_to(proc, None);
                 },
+                ProcessState::Killed => { },
                 _ => panic!("Process in active list is not running")
             }
         }
@@ -116,7 +175,6 @@ impl Engine {
             }
         }
 
-        let mut dead = Vec::new();
         while !active.is_empty() {
             let mut next_active = Vec::new();
 
@@ -154,12 +212,12 @@ impl Engine {
                     },
                     ProcessState::Trap(Syscall::Quantize(q)) => {
                         let mut q = *q as u64;
-                        let quarter = self.beat / self.freq;
+                        let quarter = oldbeat / self.freq;
                         let needed = match quarter % q {
                             0 => 0,
                             n => q - n
                         };
-                        let sub = match self.beat % self.freq {
+                        let sub = match oldbeat % self.freq {
                             0 => 0,
                             n => self.freq - n
                         };
@@ -269,7 +327,8 @@ impl Engine {
                     ProcessState::Crashed(msg) => {
                         log.push(EventLog::Crashed(proc.pid, msg.clone()));
                         dead.push(proc.pid);
-                    }
+                    },
+                    ProcessState::Killed => { },
                     s => panic!("Unhandled state: {:?}", s),
                 }
             }
@@ -280,9 +339,6 @@ impl Engine {
         for pid in dead {
             self.procs.remove(&pid);
         }
-
-        let oldbeat = self.beat;
-        self.beat += 1;
 
         (oldbeat, log)
     }

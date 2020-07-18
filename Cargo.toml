@@ -25,6 +25,10 @@ name = "nfloader"
 path = "src/nfloader/main.rs"
 
 [[bin]]
+name = "nfkill"
+path = "src/nfkill/main.rs"
+
+[[bin]]
 name = "nfops"
 path = "src/nfops/main.rs"
 

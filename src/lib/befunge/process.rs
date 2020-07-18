@@ -1,6 +1,7 @@
 
 use std::cmp::max;
 use std::rc::Rc;
+use std::mem;
 use serde::{Serialize, Deserialize};
 use super::charmap::CharMap;
 
@@ -113,6 +114,7 @@ pub enum ProcessState {
     Trap(Syscall),
     Finished,
     Crashed(String),
+    Killed
 }
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -212,6 +214,12 @@ impl Process {
         where T: ToString
     {
         self.state = ProcessState::Crashed(msg.to_string())
+    }
+
+    pub fn kill(&mut self) -> ProcessState {
+        let mut prev = ProcessState::Killed;
+        mem::swap(&mut prev, &mut self.state);
+        prev
     }
 
     pub fn set_direction(&mut self, dir: Dir) {

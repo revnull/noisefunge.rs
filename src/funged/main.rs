@@ -63,6 +63,13 @@ impl FungedServer {
                     self.waiting.push((prev, rspndr));
                 }
             },
+            Kill(pids) => {
+                if pids.len() == 0 {
+                    self.engine.kill_all()
+                } else {
+                    for p in pids { self.engine.kill(p) }
+                }
+            },
             r => panic!("Failed to handle: {:?}", r),
         };
     }
