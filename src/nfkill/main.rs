@@ -5,15 +5,19 @@ use std::process;
 use noisefunge::api::*;
 use reqwest::blocking::Client;
 use std::time::Duration;
+use serde_json;
 
-fn read_args() -> (u64, String) {
+fn read_args() -> (Vec<u64>, String) {
     let matches = App::new("nfkill")
                           .arg(Arg::with_name("PID")
                                .help("PID of process to kill, in hex.")
                                .multiple(true)
-                               .required(false))
+                               .required_unless("ALL"))
                           .arg(Arg::with_name("ALL")
+                               .short("a")
+                               .long("--all")
                                .conflicts_with("PID")
+                               .takes_value(false)
                                .required(false))
                           .arg(Arg::with_name("HOST")
                                .long("host")
@@ -34,35 +38,41 @@ fn read_args() -> (u64, String) {
     let baseuri = format!("http://{}:{}/", matches.value_of("HOST").unwrap(),
                                            matches.value_of("PORT").unwrap());
 
-    let pid = u64::from_str_radix(matches.value_of("PID").unwrap(),
-                                  16).expect("Failed to parse PID");
-                     
-    (pid, baseuri)
+    if matches.is_present("ALL") {
+        return (Vec::new(), baseuri)
+    }
+
+    let mut pids = Vec::new();
+    for pid in matches.values_of("PID").unwrap() {
+        let parsed = u64::from_str_radix(pid, 16).expect(
+            &format!("Failed to parse pid {}", pid));
+        pids.push(parsed);
+    }
+
+    return (pids, baseuri)
 }
 
 fn main() {
 
-    let (pid, baseuri) = read_args();
+    let (pids, baseuri) = read_args();
 
-    
-/*
-    let client = Client::builder().user_agent("nfloader")
+    let client = Client::builder().user_agent("nfkill")
                                   .build()
                                   .expect("Failed to build client.");
 
-    let path = format!("{}process", baseuri);
+    let body = serde_json::to_string(&KillReq{ pids: pids }).unwrap();
+    let path = format!("{}kill", baseuri);
     let request = client.post(&path)
-                        .body(prog)
-                        .header("Content-Type", "text/plain")
+                        .body(body)
+                        .header("Content-Type", "application/json")
                         .timeout(Duration::from_secs(4))
                         .build()
                         .expect("Failed to build request");
+
     let response = client.execute(request);
     std::process::exit(match response {
         Ok(response) => {
             if response.status().is_success() {
-                let resp: NewProcessResp = response.json().unwrap();
-                println!("{}", resp.pid);
                 0
             } else {
                 eprintln!("Error response: {:?}", response.status());
@@ -74,5 +84,5 @@ fn main() {
             1
         }
     });
-    */
+
 }

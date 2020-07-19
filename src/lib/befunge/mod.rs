@@ -111,19 +111,26 @@ impl Engine {
                 log.push(EventLog::Killed(*pid));
             }
             self.procs = BTreeMap::new();
+            for i in 0..255 {
+                self.buffers[i] = MessageQueue::Empty;
+            }
             return (oldbeat, log)
         }
 
         let mut needs_filter = HashSet::new();
         for pid in &killed {
-            let proc = self.procs.get_mut(&pid).expect(
-                &format!("Lost pid: {}", pid));
+            let proc = match self.procs.get_mut(&pid) {
+                Some(p) => p,
+                _ => continue,
+            };
             match proc.kill() {
                 ProcessState::Trap(Syscall::Send(ch, _)) => {
                     needs_filter.insert(ch);
+                    active.push(*pid);
                 },
                 ProcessState::Trap(Syscall::Receive(ch)) => {
                     needs_filter.insert(ch);
+                    active.push(*pid);
                 },
                 _ => ()
             }
@@ -167,8 +174,14 @@ impl Engine {
         }
 
         for &(pid, c) in sleeping.iter() {
-            if c == 0 {
-                self.procs.get_mut(&pid).map(|p| p.resume(None) );
+            let proc = match self.procs.get_mut(&pid) {
+                Some(p) => p,
+                _ => continue
+            };
+            if *proc.state() == ProcessState::Killed {
+                active.push(pid);
+            } else if c == 0 {
+                proc.resume(None);
                 active.push(pid);
             } else {
                 self.sleeping.push((pid, c - 1));
@@ -328,7 +341,9 @@ impl Engine {
                         log.push(EventLog::Crashed(proc.pid, msg.clone()));
                         dead.push(proc.pid);
                     },
-                    ProcessState::Killed => { },
+                    ProcessState::Killed => {
+                        dead.push(proc.pid);
+                    },
                     s => panic!("Unhandled state: {:?}", s),
                 }
             }

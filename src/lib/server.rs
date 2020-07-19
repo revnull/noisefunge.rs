@@ -59,7 +59,7 @@ pub struct ServerHandle {
     pub channel: Receiver<FungeRequest>
 }
 
-fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
+fn kill(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     let data : KillReq = try_or_400!(rouille::input::json_input(&request));
     
     sender.send(FungeRequest::Kill(data.pids));
@@ -67,7 +67,7 @@ fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     Response::json(&KillResp { })
 }
 
-fn kill(sender: &Sender<FungeRequest>, request: &Request) -> Response {
+fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     let data = try_or_400!(rouille::input::plain_text_body(&request));
 
     let responder = Responder::new();
