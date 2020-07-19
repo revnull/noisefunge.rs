@@ -52,7 +52,7 @@ fn main() {
         Ok(response) => {
             if response.status().is_success() {
                 let resp: NewProcessResp = response.json().unwrap();
-                println!("{}", resp.pid);
+                println!("{:X}", resp.pid);
                 0
             } else {
                 eprintln!("Error response: {:?}", response.status());
