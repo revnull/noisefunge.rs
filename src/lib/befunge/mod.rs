@@ -20,6 +20,81 @@ enum MessageQueue {
     WriteBlocked(VecDeque<(u64, u8)>)
 }
 
+impl MessageQueue {
+    pub fn new() -> Self {
+        MessageQueue::Empty
+    }
+    pub fn reset(&mut self) -> Vec<u64> {
+        let res = match self {
+            MessageQueue::ReadBlocked(q) => q.iter().map(|p| *p).collect(),
+            MessageQueue::WriteBlocked(q) => q.iter().map(|t| t.0).collect(),
+            MessageQueue::Empty => Vec::new(),
+        };
+        *self = MessageQueue::Empty;
+        res
+    }
+    pub fn retain<F>(&mut self, mut f: F)
+        where F: FnMut(&u64) -> bool
+    {
+        let empty = match self {
+            MessageQueue::ReadBlocked(ref mut q) => {
+                q.retain(|p| f(p));
+                q.is_empty()
+            },
+            MessageQueue::WriteBlocked(ref mut q) => {
+                q.retain(|(p, _)| f(p));
+                q.is_empty()
+            },
+            _ => { true }
+        };
+        if empty { *self = MessageQueue::Empty };
+    }
+
+    pub fn read(&mut self, pid: u64) -> Option<(u64, u8)> {
+        match self {
+            MessageQueue::ReadBlocked(q) => {
+                q.push_back(pid);
+                None
+            },
+            MessageQueue::WriteBlocked(q) => {
+                let res = q.pop_front().expect("Invalid WriteBlocked queue");
+                if q.is_empty() {
+                    *self = MessageQueue::Empty;
+                }
+                Some(res)
+            },
+            _ => { 
+                let mut q = VecDeque::new();
+                q.push_back(pid);
+                *self = MessageQueue::ReadBlocked(q);
+                None
+            }
+        }
+    }
+
+    pub fn write(&mut self, pid: u64, c: u8) -> Option<u64> {
+        match self {
+            MessageQueue::ReadBlocked(q) => {
+                let res = q.pop_front().expect("Invalid ReadBlocked queue");
+                if q.is_empty() {
+                    *self = MessageQueue::Empty;
+                }
+                Some(res)
+            },
+            MessageQueue::WriteBlocked(q) => {
+                q.push_back((pid, c));
+                None
+            },
+            _ => { 
+                let mut q = VecDeque::new();
+                q.push_back((pid, c));
+                *self = MessageQueue::WriteBlocked(q);
+                None
+            }
+        }
+    }
+}
+
 pub struct Engine {
     beat: u64,
     freq: u64,
@@ -246,56 +321,32 @@ impl Engine {
                         let i = *chan as usize;
                         let c = *c;
                         let buf = &mut self.buffers[i];
-                        match buf {
-                            MessageQueue::Empty => {
-                                let mut q = VecDeque::new();
-                                q.push_back((proc.pid, c));
-                                *buf = MessageQueue::WriteBlocked(q);
-                            },
-                            MessageQueue::WriteBlocked(q) => {
-                                q.push_back((proc.pid, c));
-                            },
-                            MessageQueue::ReadBlocked(q) => {
+                        match buf.write(proc.pid, c) {
+                            Some(blpid) => {
                                 proc.resume(None);
                                 next_active.push(proc.pid);
-                                let blocked = q.pop_front()
-                                    .expect("Empty ReadBlocked Queue");
-                                let blproc = self.procs.get_mut(&blocked)
+                                let blproc = self.procs.get_mut(&blpid)
                                     .expect("Blocked process not found");
                                 blproc.resume(Some(c));
                                 next_active.push(blproc.pid);
-                                if q.len() == 0 {
-                                    *buf = MessageQueue::Empty;
-                                }
                             },
-                        };
+                            None => { }
+                        }
                     },
                     ProcessState::Trap(Syscall::Receive(ch)) => {
                         let i = *ch as usize;
                         let buf = &mut self.buffers[i];
-                        match buf {
-                            MessageQueue::Empty => {
-                                let mut q = VecDeque::new();
-                                q.push_back(proc.pid);
-                                *buf = MessageQueue::ReadBlocked(q);
-                            },
-                            MessageQueue::ReadBlocked(q) => {
-                                q.push_back(proc.pid);
-                            },
-                            MessageQueue::WriteBlocked(q) => {
-                                let (blocked, c) = q.pop_front()
-                                    .expect("Empty ReadBlocked Queue");
+                        match buf.read(proc.pid) {
+                            Some((blpid, c)) => {
                                 proc.resume(Some(c));
                                 next_active.push(proc.pid);
-                                let blproc = self.procs.get_mut(&blocked)
+                                let blproc = self.procs.get_mut(&blpid)
                                     .expect("Blocked process not found");
                                 blproc.resume(None);
                                 next_active.push(blproc.pid);
-                                if q.len() == 0 {
-                                    *buf = MessageQueue::Empty;
-                                }
                             },
-                        };
+                            None => {},
+                        }
                     },
                     ProcessState::Trap(Syscall::Defop(c)) => {
                         let top = proc.top().unwrap();
