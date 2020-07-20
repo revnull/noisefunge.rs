@@ -51,6 +51,9 @@ impl OpSet {
         ops.insert_safe(
             make_op!(104, "Hex Byte", "Pop x and y. Push (x*16)+y.",
                      hex_byte));
+        ops.insert_safe(
+            make_op!(110, "Note", "Pop o and x. Push (o*12)+x.",
+                     push_note));
 
 
         ops.insert_safe(
@@ -225,6 +228,11 @@ fn hex_byte(proc: &mut Process) {
     proc.push((msb << 4) + lsb);
 }
 
+fn push_note(proc: &mut Process) {
+    let oct = pop!(proc);
+    let note = pop!(proc);
+    proc.push((oct * 12) + note);
+}
 fn set_direction(dir: Dir) -> Op {
     let (opcode, name) = match dir {
         Dir::U => (94, "Up"),
