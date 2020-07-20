@@ -210,7 +210,7 @@ fn quote(proc: &mut Process) {
 }
 
 fn push_int(i: u8) -> Op {
-    let opcode = if i < 10 { 48 + i } else { 65 + i };
+    let opcode = if i < 10 { 48 + i } else { 65 + i - 10 };
 
     let push_i = move |proc: &mut Process| {
         proc.push(i);
