@@ -2,14 +2,13 @@
 use clap::{Arg, App};
 use noisefunge::api::*;
 use pancurses::{initscr, cbreak, noecho, endwin, Input, has_colors,
-                start_color, init_pair, curs_set, Window};
+                start_color, init_pair, curs_set};
 use reqwest::blocking::Client;
 use std::cmp;
 use std::mem;
 use std::thread;
 use std::sync::{Arc, Mutex, Condvar};
 use std::time::Duration;
-use std::collections::BTreeMap;
 
 fn read_args() -> String {
     let matches = App::new("nfbuffer")
@@ -107,13 +106,12 @@ fn main() {
 
     window.nodelay(true);
     let handle = start_request_thread(&baseuri);
-    let mut done = false;
     let sleep_dur = Duration::from_millis(10);
     let mut state : Option<EngineState> = None;
     let mut err = None;
     let mut needs_redraw = true;
 
-    'outer: while !done {
+    'outer: loop {
 
         if needs_redraw {
             needs_redraw = false;
@@ -180,6 +178,23 @@ fn main() {
             window.refresh();
         }
 
+        loop {
+            match window.getch() {
+                None => break,
+                Some(Input::KeyResize) => {
+                    needs_redraw = true;
+                    continue 'outer;
+                }
+                Some(Input::Character('q')) => {
+                    break 'outer;
+                },
+                Some(Input::Character('Q')) => {
+                    break 'outer;
+                },
+                _ => ()
+            }
+        }
+
         let lock = &handle.0;
         let cond = &handle.1;
         let mut val = lock.lock().unwrap();
@@ -200,4 +215,5 @@ fn main() {
         }
     }
 
+    endwin();
 }
