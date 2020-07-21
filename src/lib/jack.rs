@@ -2,7 +2,6 @@
 use arr_macro::arr;
 
 use jack::*;
-use std::collections::HashSet;
 use std::collections::HashMap;
 use std::rc::Rc;
 use crossbeam_channel::{bounded, Sender, Receiver};
@@ -86,7 +85,7 @@ pub struct JackHandle {
 
 impl JackHandle {
     pub fn new(conf : &FungedConfig) -> JackHandle {
-        let (client, status) =
+        let (client, _status) =
             jack::Client::new("noisefunge",
                               ClientOptions::NO_START_SERVER)
                              .expect("Failed to start jack client.");
@@ -113,13 +112,13 @@ impl JackHandle {
             let r1 = rcv1;
             let mut i :u64 = 0;
             ClosureProcessHandler::new(
-                move |cl: &Client, ps: &ProcessScope| -> Control {
+                move |_cl: &Client, ps: &ProcessScope| -> Control {
                     let mut wtrs = portmap.writers(ps);
                     for bin in beats_in.iter(ps) {
                         if bin.bytes[0] == 248 {
                             let t = bin.time;
                             i += 1;
-                            snd2.try_send(i);
+                            snd2.try_send(i).expect("try_send failed");
                             for msg in r1.try_iter() {
                                 match msg {
                                     MidiMsg::On(ch, pch, vel) => {
@@ -129,7 +128,7 @@ impl JackHandle {
                                             time: t,
                                             bytes: &[
                                                 144 + ch, pch, vel
-                                            ] });
+                                            ] }).expect("write failed");
                                     },
                                     MidiMsg::Off(ch, pch) => {
                                         let (ch, wtr) = wtrs.get_writer(ch)
@@ -138,7 +137,7 @@ impl JackHandle {
                                             time: t,
                                             bytes: &[
                                                 144 + ch, pch, 0
-                                            ] });
+                                            ] }).expect("write failed");
                                     }
                                     MidiMsg::Program(ch, bank, patch) => {
                                         let (ch, wtr) = wtrs.get_writer(ch)
@@ -148,14 +147,14 @@ impl JackHandle {
                                                 time: t,
                                                 bytes: &[
                                                     176 + ch, 00, bank
-                                                ] });
+                                                ] }).expect("write failed");
                                         }
                                         if let Some(patch) = patch {
                                             wtr.write(&jack::RawMidi {
                                                 time: t,
                                                 bytes: &[
                                                     192 + ch, patch
-                                                ] });
+                                                ] }).expect("write failed");
                                         }
                                     }
                                 }
@@ -192,7 +191,8 @@ impl JackHandle {
                 None => continue
             };
             if cc.bank.is_some() || cc.program.is_some() {
-                snd1.send(MidiMsg::Program(i as u8, cc.bank, cc.program));
+                snd1.send(MidiMsg::Program(i as u8, cc.bank, cc.program))
+                    .expect("Sender::send failed");
             }
         }
 
@@ -207,6 +207,10 @@ impl JackHandle {
 
     pub fn send_midi(&self, msg: MidiMsg) -> bool {
         self.note_channel.try_send(msg).is_ok()
+    }
+
+    pub fn shutdown(self) {
+        (self.deactivate)();
     }
 
 }

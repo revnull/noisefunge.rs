@@ -1,7 +1,5 @@
 
 use clap::{Arg, App};
-use std::fs;
-use std::process;
 use noisefunge::api::*;
 use reqwest::blocking::Client;
 use std::time::Duration;

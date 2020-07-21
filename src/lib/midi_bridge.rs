@@ -2,7 +2,7 @@
 use arr_macro::arr;
 use std::collections::BTreeMap;
 use std::mem;
-use crate::config::{FungedConfig, ChannelConfig};
+use crate::config::{FungedConfig};
 use crate::befunge::{EventLog, Note};
 use crate::jack::{JackHandle, MidiMsg};
 
@@ -70,7 +70,7 @@ impl NoteFilter {
                      events: BTreeMap::new() }
     }
 
-    fn activate(mut self, beat: u64) -> ActiveFilter {
+    fn activate(self, beat: u64) -> ActiveFilter {
         ActiveFilter::new(self, beat)
     }
 }
@@ -78,16 +78,14 @@ impl NoteFilter {
 pub struct MidiBridge<'a> {
     handle: &'a JackHandle,
     beat: u64,
-    events: BTreeMap<u64, Vec<MidiMsg>>,
     filters: BTreeMap<u8, NoteFilter>
 }
 
 impl<'a> MidiBridge<'a> {
-    pub fn new(conf: &FungedConfig, handle: &'a JackHandle) -> Self {
+    pub fn new(_conf: &FungedConfig, handle: &'a JackHandle) -> Self {
         MidiBridge {
             handle: handle,
             beat: 0,
-            events: BTreeMap::new(),
             filters: BTreeMap::new(),
         }
     }

@@ -1,17 +1,11 @@
 
 use rouille::{Request, Response, router, try_or_400};
-use rouille::input;
 use std::thread;
-use std::error;
-use std::fmt;
 use std::sync::{Arc, Mutex, Condvar};
 use crossbeam_channel::{bounded, Sender, Receiver};
-use http::uri::Parts;
-use serde_json::{from_str, to_vec};
 
 use crate::config::{FungedConfig};
 use crate::api::*;
-use querystring::querify;
 
 #[derive(Debug,Clone)]
 pub struct Responder<T>(Arc<(Mutex<Option<T>>, Condvar)>);
@@ -62,7 +56,8 @@ pub struct ServerHandle {
 fn kill(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     let data : KillReq = try_or_400!(rouille::input::json_input(&request));
     
-    sender.send(FungeRequest::Kill(data.pids));
+    sender.send(FungeRequest::Kill(data.pids))
+          .expect("Sender::send failed");
 
     Response::json(&KillResp { })
 }
@@ -71,7 +66,8 @@ fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
     let data = try_or_400!(rouille::input::plain_text_body(&request));
 
     let responder = Responder::new();
-    sender.send(FungeRequest::StartProcess(data, responder.clone()));
+    sender.send(FungeRequest::StartProcess(data, responder.clone()))
+          .expect("Sender::send failed");
 
     Response::json(&NewProcessResp { pid: responder.wait().unwrap() })
 }
@@ -81,7 +77,8 @@ fn get_state(sender: &Sender<FungeRequest>, request: &Request) -> Response {
                       .and_then(|p| p.parse::<u64>().ok());
 
     let responder = Responder::new();
-    sender.send(FungeRequest::GetState(prev, responder.clone()));
+    sender.send(FungeRequest::GetState(prev, responder.clone()))
+          .expect("Sender::send failed");
 
     match responder.wait() {
         Some(bytes) => Response::from_data("application/json; charset=utf-8",
@@ -114,6 +111,10 @@ impl ServerHandle {
 
         ServerHandle { thread: handle,
                        channel: rcv }
+    }
+
+    pub fn shutdown(self) {
+        self.thread.join().expect("Failed to join server thread");
     }
 }
 

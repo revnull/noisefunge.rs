@@ -6,9 +6,7 @@ use noisefunge::befunge::*;
 use noisefunge::config::*;
 use noisefunge::api::*;
 use noisefunge::midi_bridge::*;
-use std::{thread, time};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use crossbeam_channel::select;
 use serde_json::{to_vec};
 
@@ -70,7 +68,6 @@ impl FungedServer {
                     for p in pids { self.engine.kill(p) }
                 }
             },
-            r => panic!("Failed to handle: {:?}", r),
         };
     }
 
@@ -95,7 +92,7 @@ fn main() {
     let mut server = FungedServer::new(
         FungedConfig::read_config(&read_args()));
 
-    let mut handle = JackHandle::new(&server.config);
+    let handle = JackHandle::new(&server.config);
     let mut bridge = MidiBridge::new(&server.config, &handle);
     let http_serv = ServerHandle::new(&server.config);
     let mut prev_i = 0;

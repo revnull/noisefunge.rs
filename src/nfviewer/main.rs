@@ -1,6 +1,5 @@
 
 use noisefunge::api::*;
-use noisefunge::config::*;
 use clap::{Arg, App};
 use std::mem;
 use pancurses::{initscr, cbreak, noecho, endwin, Input, has_colors,
@@ -272,7 +271,7 @@ impl Tiler {
         'outer: while y < maxy {
             let mut x = minx;
 
-            if let Some(mut row) = old_rows.next() {
+            if let Some(row) = old_rows.next() {
                 let mut new_tiles = Vec::new();
                 for tile in row.tiles.iter_mut() {
                     if let Some((_height, t)) =
@@ -368,13 +367,12 @@ fn main() {
         init_pair(6, pancurses::COLOR_BLACK, pancurses::COLOR_MAGENTA);
     }
     window.nodelay(true);
-    let mut done = false;
 
     let handle = start_request_thread(&baseuri);
     let sleep_dur = Duration::from_millis(10);
     let mut tiler = Tiler::new();
 
-    'outer: while !done {
+    'outer: loop {
         tiler.draw(&window);
         loop {
             match window.getch() {

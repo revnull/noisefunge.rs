@@ -372,7 +372,7 @@ mod tests {
         let mut long_line = String::with_capacity(512);
         let mut too_many = String::with_capacity(512);
 
-        for i in 0..256 {
+        for _i in 0..256 {
             long_line.push_str("a");
             too_many.push_str("a\n");
         }

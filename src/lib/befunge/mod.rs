@@ -21,18 +21,10 @@ enum MessageQueue {
 }
 
 impl MessageQueue {
-    pub fn new() -> Self {
-        MessageQueue::Empty
-    }
-    pub fn reset(&mut self) -> Vec<u64> {
-        let res = match self {
-            MessageQueue::ReadBlocked(q) => q.iter().map(|p| *p).collect(),
-            MessageQueue::WriteBlocked(q) => q.iter().map(|t| t.0).collect(),
-            MessageQueue::Empty => Vec::new(),
-        };
+    pub fn reset(&mut self) {
         *self = MessageQueue::Empty;
-        res
     }
+
     pub fn retain<F>(&mut self, mut f: F)
         where F: FnMut(&u64) -> bool
     {
@@ -187,7 +179,7 @@ impl Engine {
             }
             self.procs = BTreeMap::new();
             for i in 0..255 {
-                self.buffers[i] = MessageQueue::Empty;
+                self.buffers[i].reset();
             }
             return (oldbeat, log)
         }
@@ -212,19 +204,7 @@ impl Engine {
         }
 
         for ch in needs_filter {
-            let buf = &mut self.buffers[ch as usize];
-            let empty = match buf {
-                MessageQueue::ReadBlocked(ref mut v) => {
-                    v.retain(|ref p| !killed.contains(p));
-                    v.is_empty()
-                },
-                MessageQueue::WriteBlocked(ref mut v) => {
-                    v.retain(|(ref p, _)| !killed.contains(p));
-                    v.is_empty()
-                },
-                MessageQueue::Empty => { true } // should not happen.
-            };
-            if empty { *buf = MessageQueue::Empty }
+            self.buffers[ch as usize].retain(|ref p| !killed.contains(p));
         }
 
         for pid in active.iter() {
@@ -299,7 +279,7 @@ impl Engine {
                         }
                     },
                     ProcessState::Trap(Syscall::Quantize(q)) => {
-                        let mut q = *q as u64;
+                        let q = *q as u64;
                         let quarter = oldbeat / self.freq;
                         let needed = match quarter % q {
                             0 => 0,
@@ -363,18 +343,21 @@ impl Engine {
                                     "User defined opcode"));
                     },
                     ProcessState::Trap(Syscall::Call(c)) => {
-                        self.ops.apply_to(proc, Some(*c));
+                        let c = *c;
+                        self.ops.apply_to(proc, Some(c));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
                     ProcessState::Trap(Syscall::PrintChar(c)) => {
-                        log.push(EventLog::PrintChar(proc.pid, *c));
-                        proc.set_output(format!("{}", self.charmap[*c]));
+                        let c = *c;
+                        log.push(EventLog::PrintChar(proc.pid, c));
+                        proc.set_output(format!("{}", self.charmap[c]));
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
                     ProcessState::Trap(Syscall::PrintNum(c)) => {
-                        log.push(EventLog::PrintNum(proc.pid, *c));
+                        let c = *c;
+                        log.push(EventLog::PrintNum(proc.pid, c));
                         proc.set_output(format!("{:X}", c));
                         proc.resume(None);
                         next_active.push(proc.pid);
@@ -395,7 +378,6 @@ impl Engine {
                     ProcessState::Killed => {
                         dead.push(proc.pid);
                     },
-                    s => panic!("Unhandled state: {:?}", s),
                 }
             }
 
@@ -464,7 +446,7 @@ mod tests {
             .expect("Parse failed."));
         eng.make_process(Prog::parse(">0~ &@")
             .expect("Parse failed."));
-        for i in 1..7  {
+        for _i in 1..7  {
             assert_eq!(eng.step().1, vec![]);
         }
         assert_eq!(eng.step().1, vec![EventLog::Finished(1)]);

@@ -2,7 +2,7 @@ use rand::Rng;
 use std::rc::Rc;
 use arr_macro::arr;
 
-use super::process::{Process, Prog, ProcessState, Syscall, Dir, Op, PC, Note};
+use super::process::{Process, ProcessState, Syscall, Dir, Op, Note};
 
 macro_rules! pop {
     ($proc : ident) => {
@@ -204,7 +204,7 @@ impl OpSet {
 
 }
 
-fn noop(proc: &mut Process) {
+fn noop(_proc: &mut Process) {
 
 }
 
@@ -456,13 +456,15 @@ fn put(proc: &mut Process) {
     let x = pop!(proc) as usize;
     let c = pop!(proc);
 
-    let mut top = proc.top_mut().unwrap();
-    match top.memory.xy_to_pc(x, y) {
-        Some(pc) => {
-            Rc::make_mut(&mut top.memory).update(pc, c);
-        },
-        None => proc.die("Put outside of bounds."),
-    }
+    let top = proc.top_mut().unwrap();
+    let pc = match top.memory.xy_to_pc(x, y) {
+        Some(pc) => pc,
+        None => {
+            proc.die("Put outside of bounds.");
+            return
+        }
+    };
+    Rc::make_mut(&mut top.memory).update(pc, c);
 }
 
 fn get(proc: &mut Process) {
@@ -470,12 +472,15 @@ fn get(proc: &mut Process) {
     let x = pop!(proc) as usize;
 
     let top = proc.top().unwrap();
-    match top.memory.xy_to_pc(x, y) {
-        Some(pc) => {
-            proc.push(top.memory.lookup(pc));
-        },
-        None => proc.die("Get outside of bounds."),
-    }
+    let pc = match top.memory.xy_to_pc(x, y) {
+        Some(pc) => pc,
+        None => {
+            proc.die("Get outside of bounds.");
+            return
+        }
+    };
+    let c = top.memory.lookup(pc);
+    proc.push(c);
     
 }
 
@@ -531,6 +536,7 @@ fn play(proc: &mut Process) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::befunge::process::{Prog, PC};
 
     fn demo_proc_1() -> Process {
         Process::new(1,
