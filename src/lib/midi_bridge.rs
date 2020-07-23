@@ -6,79 +6,68 @@ use crate::config::{FungedConfig};
 use crate::befunge::{EventLog, Note};
 use crate::jack::{JackHandle, MidiMsg};
 
-struct NoteFilter {
+struct Basic {
     channel: u8,
     active: [bool; 127],
-    events: BTreeMap<u64, Vec<u8>>
+    off_events: BTreeMap<u64, Vec<u8>>,
+    current: Option<u64>
 }
 
-struct ActiveFilter {
-    beat: u64,
-    filter: NoteFilter,
-    beat_events: Vec<MidiMsg>
+impl Basic {
+    fn new(channel: u8) -> Self {
+        Basic {
+            channel: channel,
+            active: arr![false; 127],
+            off_events: BTreeMap::new(),
+            current: None
+        }
+    }
 }
 
-impl ActiveFilter {
-    fn new(mut filter: NoteFilter, beat: u64) -> Self {
-        let mut beat_events = Vec::new();
+pub trait Filter {
+    fn activate(&mut self, beat: u64, handle: &JackHandle);
+    fn push(&mut self, note: &Note, handle: &JackHandle);
+    fn resolve(&mut self, handle: &JackHandle) -> bool;
+}
 
-        match filter.events.remove(&beat) {
-            None => {},
-            Some(evs) => {
-                for pch in evs {
-                    beat_events.push(MidiMsg::Off(filter.channel, pch));
-                    filter.active[pch as usize] = false;
-                }
+impl Filter for Basic {
+    fn activate(&mut self, beat: u64, handle: &JackHandle) {
+        if self.current.is_some() {
+            panic!("Basic::activate called twice");
+        }
+        self.current = Some(beat);
+
+        if let Some(evs) = self.off_events.remove(&beat) {
+            for pch in evs {
+                self.active[pch as usize] = false;
+                handle.send_midi(MidiMsg::Off(self.channel, pch));
             }
         }
-
-        ActiveFilter {
-            beat: beat,
-            filter: filter,
-            beat_events: beat_events }
     }
 
-    fn push(&mut self, note: &Note) {
+    fn push(&mut self, note: &Note, handle: &JackHandle) {
+        let beat = self.current.expect("Basic::push without activate");
         let i = note.pch as usize;
-        if self.filter.active[i] { return; }
+        if self.active[i] { return }
+        self.active[i] = true;
 
-        self.filter.active[i] = true;
-        self.beat_events.push(MidiMsg::On(note.cha, note.pch, note.vel));
-        self.filter.events.entry(self.beat + note.dur as u64)
-                          .or_insert_with(|| Vec::new())
-                          .push(note.pch);
+        self.off_events.entry(beat + note.dur as u64)
+                       .or_insert_with(|| Vec::new())
+                       .push(note.pch);
+
+        handle.send_midi(MidiMsg::On(note.cha, note.pch, note.vel));
     }
 
-    fn resolve(self, handle: &JackHandle) -> Option<NoteFilter> {
-
-        for ev in &self.beat_events {
-            handle.send_midi(*ev);
-        }
-
-        if self.filter.events.is_empty() {
-            None
-        } else {
-            Some(self.filter)
-        }
-    }
-}
-
-impl NoteFilter {
-    fn new(ch: u8) -> Self {
-        NoteFilter { channel: ch,
-                     active: arr![false; 127],
-                     events: BTreeMap::new() }
-    }
-
-    fn activate(self, beat: u64) -> ActiveFilter {
-        ActiveFilter::new(self, beat)
+    fn resolve(&mut self, _handle: &JackHandle) -> bool {
+        self.current = None;
+        !self.off_events.is_empty()
     }
 }
 
 pub struct MidiBridge<'a> {
     handle: &'a JackHandle,
     beat: u64,
-    filters: BTreeMap<u8, NoteFilter>
+    filters: BTreeMap<u8, Box<dyn Filter>>
 }
 
 impl<'a> MidiBridge<'a> {
@@ -91,10 +80,11 @@ impl<'a> MidiBridge<'a> {
     }
 
     fn step_i(&mut self, beat: u64, log: &Vec<EventLog>) {
-        let filters = mem::take(&mut self.filters);
-        let mut active = BTreeMap::new();
-        for (ch, filt) in filters {
-            active.insert(ch, filt.activate(beat));
+        //let mut filters = mem::take(&mut self.filters);
+        let handle = self.handle;
+
+        for filt in self.filters.values_mut() {
+            filt.activate(beat, handle);
         }
 
         for ev in log {
@@ -105,17 +95,22 @@ impl<'a> MidiBridge<'a> {
             if note.pch > 127 { continue }
             if note.dur < 1 { continue }
 
-            let act = active.entry(note.cha).or_insert_with(||
-                    NoteFilter::new(note.cha).activate(beat)
-                );
-            act.push(note);
+            let act = self.filters.entry(note.cha).or_insert_with(|| {
+                   let mut f = Basic::new(note.cha);
+                   f.activate(beat, handle);
+                   Box::new(f)
+                });
+            act.push(note, self.handle);
         }
 
-        for (ch, act) in active {
-            match act.resolve(self.handle) {
-                None => (),
-                Some(filt) => { self.filters.insert(ch, filt); }
+        let mut dead = Vec::new();
+        for (ch, filter) in self.filters.iter_mut() {
+            if !filter.resolve(handle) {
+                dead.push(*ch);
             }
+        }
+        for d in dead {
+            self.filters.remove(&d);
         }
 
         self.beat = beat;
