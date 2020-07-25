@@ -7,7 +7,8 @@ pub struct ChannelConfig {
     pub local: Rc<str>,
     pub starting: u8,
     pub bank: Option<u8>,
-    pub program: Option<u8>
+    pub program: Option<u8>,
+    pub note_filter: Option<String>,
 }
 
 pub struct FungedConfig {
@@ -17,7 +18,7 @@ pub struct FungedConfig {
     pub period: u64,
     pub locals: HashSet<Rc<str>>,
     pub connections: Vec<(Rc<str>, String)>,
-    pub channels: [Option<ChannelConfig>; 256]
+    pub channels: [Option<ChannelConfig>; 256],
 }
 
 fn get_connections(local: &Rc<str>, table: &HashMap<String, config::Value>)
@@ -59,7 +60,6 @@ impl FungedConfig {
         settings.set_default("period", 24).unwrap();
 
         settings.merge(config::File::with_name(&file)).unwrap();
-        println!("{:?}", settings);
         let host = settings.get_str("host").unwrap();
         let port = settings.get_int("port").expect("Port not set") as u16;
         let bi = settings.get_str("beats_in").expect("Beats in not found.");
@@ -91,10 +91,11 @@ impl FungedConfig {
                             ChannelConfig { local: Rc::clone(&local),
                                             starting: ch as u8,
                                             bank: None,
-                                            program: None });
+                                            program: None,
+                                            note_filter: None });
                     }
                 }
-                _ => { println!("No starting channel for {}", &local); }
+                _ => { eprintln!("No starting channel for {}", &local); }
             };
             locals.insert(local);
         }
@@ -112,6 +113,8 @@ impl FungedConfig {
                              .map(|b| ch.bank = Some(b as u8));
             table.get("program").and_then(|v| v.clone().into_int().ok())
                                 .map(|b| ch.program = Some(b as u8));
+            table.get("note_filter").and_then(|v| v.clone().into_str().ok())
+                                    .map(|f| ch.note_filter = Some(f));
         }
 
         FungedConfig { host: host,

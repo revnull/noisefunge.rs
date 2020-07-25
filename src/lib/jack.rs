@@ -169,7 +169,6 @@ impl JackHandle {
                            .expect("Failed to activate client.");
         let client = active.as_client();
         for (src, dst) in &conf.connections {
-            println!("{} -> {}", src, dst);
             let src_name = &locals2.get(src).unwrap().name().unwrap();
             for name in client.ports(Some(dst), None, PortFlags::IS_INPUT) {
                 println!("{} -> {}: {:?}", src_name, name,

@@ -30,6 +30,7 @@ program = 0
 
 [channel.1]
 program = 0
+note_filter = "solo"
 
 [channel.18]
 bank = 0

@@ -6,6 +6,27 @@ use crate::config::{FungedConfig};
 use crate::befunge::{EventLog, Note};
 use crate::jack::{JackHandle, MidiMsg};
 
+pub enum FilterSpec {
+    Basic,
+    Solo
+}
+
+impl FilterSpec {
+    fn parse(input: &str) -> Result<Self, String> {
+        if input == "solo" {
+            return Ok(FilterSpec::Solo)
+        }
+        Err(format!("Unrecognized note filter: {}", input))
+    }
+
+    fn to_filter(&self, channel: u8) -> Box<dyn Filter> {
+        match self {
+            FilterSpec::Basic => Box::new(Basic::new(channel)),
+            FilterSpec::Solo => Box::new(Solo::new(channel)),
+        }
+    }
+}
+
 pub trait Filter {
     fn activate(&mut self, beat: u64, handle: &JackHandle);
     fn push(&mut self, note: &Note, handle: &JackHandle);
@@ -158,23 +179,43 @@ impl Filter for Solo {
 pub struct MidiBridge<'a> {
     handle: &'a JackHandle,
     beat: u64,
+    filter_specs: [FilterSpec; 256],
     filters: BTreeMap<u8, Box<dyn Filter>>
 }
 
 impl<'a> MidiBridge<'a> {
-    pub fn new(_conf: &FungedConfig, handle: &'a JackHandle) -> Self {
+    pub fn new(conf: &FungedConfig, handle: &'a JackHandle) -> Self {
+        let mut specs = arr![FilterSpec::Basic; 256];
+
+        for ch in 0..=255 {
+            let filt = conf.channels[ch as usize].as_ref()
+                            .and_then(|cc| cc.note_filter.as_ref());
+            let spec = match filt {
+                None => continue,
+                Some(s) => {
+                    match FilterSpec::parse(s) {
+                        Ok(spec) => spec,
+                        Err(err) => panic!(err),
+                    }
+                }
+            };
+
+            specs[ch as usize] = spec;
+        }
+
         MidiBridge {
             handle: handle,
             beat: 0,
+            filter_specs: specs,
             filters: BTreeMap::new(),
         }
     }
 
     fn step_i(&mut self, beat: u64, log: &Vec<EventLog>) {
-        //let mut filters = mem::take(&mut self.filters);
+        let mut filters = mem::take(&mut self.filters);
         let handle = self.handle;
 
-        for filt in self.filters.values_mut() {
+        for filt in filters.values_mut() {
             filt.activate(beat, handle);
         }
 
@@ -186,25 +227,27 @@ impl<'a> MidiBridge<'a> {
             if note.pch > 127 { continue }
             if note.dur < 1 { continue }
 
-            let act = self.filters.entry(note.cha).or_insert_with(|| {
-                   let mut f = Basic::new(note.cha);
-                   f.activate(beat, handle);
-                   Box::new(f)
+            let act = filters.entry(note.cha).or_insert_with(|| {
+                    let mut f = self.filter_specs[note.cha as usize]
+                                    .to_filter(note.cha);
+                    f.activate(beat, handle);
+                    f
                 });
             act.push(note, self.handle);
         }
 
         let mut dead = Vec::new();
-        for (ch, filter) in self.filters.iter_mut() {
+        for (ch, filter) in filters.iter_mut() {
             if !filter.resolve(handle) {
                 dead.push(*ch);
             }
         }
         for d in dead {
-            self.filters.remove(&d);
+            filters.remove(&d);
         }
 
         self.beat = beat;
+        self.filters = filters;
     }
 
     pub fn step(&mut self, beat: u64, log: &Vec<EventLog>) {
