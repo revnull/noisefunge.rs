@@ -1,11 +1,18 @@
 
 use arr_macro::arr;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::mem;
 use crate::config::{FungedConfig};
 use crate::befunge::{EventLog, Note};
 use crate::jack::{JackHandle, MidiMsg};
 
+pub trait Filter {
+    fn activate(&mut self, beat: u64, handle: &JackHandle);
+    fn push(&mut self, note: &Note, handle: &JackHandle);
+    fn resolve(&mut self, handle: &JackHandle) -> bool;
+}
+
+// Basic - prevents a note from playing if it is already playing.
 struct Basic {
     channel: u8,
     active: [bool; 127],
@@ -22,12 +29,6 @@ impl Basic {
             current: None
         }
     }
-}
-
-pub trait Filter {
-    fn activate(&mut self, beat: u64, handle: &JackHandle);
-    fn push(&mut self, note: &Note, handle: &JackHandle);
-    fn resolve(&mut self, handle: &JackHandle) -> bool;
 }
 
 impl Filter for Basic {
@@ -62,6 +63,96 @@ impl Filter for Basic {
         self.current = None;
         !self.off_events.is_empty()
     }
+}
+
+// Solo - Only let one note play at once. Most recent note supercedes existing
+// notes, but will fall back to longer-held notes.
+struct Solo {
+    channel: u8,
+    active: VecDeque<(u64, u8, u8)>, // until_beat, pch, vel
+    playing: Option<u8>,
+    current: Option<u64>,
+}
+
+impl Solo {
+    fn new(channel: u8) -> Self {
+        Solo {
+            channel: channel,
+            active: VecDeque::new(),
+            playing: None,
+            current: None
+        }
+    }
+}
+
+impl Filter for Solo {
+
+    fn activate(&mut self, beat: u64, _handle: &JackHandle) {
+        if self.current.is_some() {
+            panic!("Solo::activate on unresolved filter");
+        }
+        self.current = Some(beat);
+
+        loop {
+            match self.active.front() {
+                None => break,
+                Some((end, _, _)) => {
+                    if *end > beat { break }
+                }
+            }
+            self.active.pop_front();
+        }
+
+        loop {
+            match self.active.back() {
+                None => break,
+                Some((end, _, _)) => {
+                    if *end > beat { break }
+                }
+            }
+            self.active.pop_back();
+        }
+    }
+
+    fn push(&mut self, note: &Note, _handle: &JackHandle) {
+        let beat = self.current.expect("Solo::push without activate");
+
+        self.active.push_back((beat + note.dur as u64, note.pch, note.vel));
+    }
+
+    fn resolve(&mut self, handle: &JackHandle) -> bool {
+        if self.current.is_none() {
+            panic!("Solo::resolve without activate");
+        }
+        self.current = None;
+        if self.active.is_empty() {
+            if let Some(oldpch) = self.playing {
+                handle.send_midi(MidiMsg::Off(self.channel, oldpch));
+                self.playing = None;
+            }
+            return false
+        }
+
+        let (_, pch, vel) = self.active.back().unwrap();
+        let pch = *pch;
+        let vel = *vel;
+
+        match self.playing {
+            None => {
+                handle.send_midi(MidiMsg::On(self.channel, pch, vel));
+            },
+            Some(oldpch) => {
+                if oldpch != pch {
+                    handle.send_midi(MidiMsg::Off(self.channel, oldpch));
+                    handle.send_midi(MidiMsg::On(self.channel, pch, vel));
+                }
+            }
+        }
+
+        self.playing = Some(pch);
+        true
+    }
+
 }
 
 pub struct MidiBridge<'a> {
