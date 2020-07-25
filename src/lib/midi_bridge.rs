@@ -1,21 +1,50 @@
 
 use arr_macro::arr;
+use rand::Rng;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem;
+use std::rc::Rc;
 use crate::config::{FungedConfig};
 use crate::befunge::{EventLog, Note};
 use crate::jack::{JackHandle, MidiMsg};
 
 pub enum FilterSpec {
     Basic,
-    Solo
+    Solo,
+    RandomArp(Rc<[u64]>),
 }
 
 impl FilterSpec {
     fn parse(input: &str) -> Result<Self, String> {
-        if input == "solo" {
+        let v : Vec<&str> = input.split(':').collect();
+
+        if v.len() == 0 {
+            return Err("Empty note_filter spec".to_string());
+        }
+
+        if v[0] == "solo" {
+            if v.len() != 1 {
+                return Err("solo does not take arguments".to_string());
+            }
             return Ok(FilterSpec::Solo)
         }
+
+        if v[0] == "random" {
+            if v.len() == 1 {
+                return Err("random needs at least one argument".to_string());
+            }
+            let mut durs = Vec::new();
+
+            for s in v.iter().skip(1) {
+                match s.parse::<u64>() {
+                    Ok(d) => durs.push(d),
+                    Err(e) => return Err(format!("Bad argument: {:?}", e))
+                }
+            }
+
+            return Ok(FilterSpec::RandomArp(durs.into()))
+        }
+
         Err(format!("Unrecognized note filter: {}", input))
     }
 
@@ -23,6 +52,8 @@ impl FilterSpec {
         match self {
             FilterSpec::Basic => Box::new(Basic::new(channel)),
             FilterSpec::Solo => Box::new(Solo::new(channel)),
+            FilterSpec::RandomArp(durs) =>
+                Box::new(RandomArp::new(channel, durs.clone())),
         }
     }
 }
@@ -171,6 +202,80 @@ impl Filter for Solo {
         }
 
         self.playing = Some(pch);
+        true
+    }
+
+}
+
+
+// Random Arpeggiator - takes a slice of u64 as a cycle for durtions.
+struct RandomArp {
+    channel: u8,
+    durations: Rc<[u64]>,
+    next_dur: usize,
+    next_change: Option<(u64, u8)>, // Change beat, current pch
+    active: Vec<(u64, u8, u8)>, // endbeat, pch, vel
+    current: Option<u64>,
+}
+
+impl RandomArp {
+    fn new (channel: u8, durations: Rc<[u64]>) -> Self {
+        RandomArp {
+            channel: channel,
+            durations: durations,
+            next_dur: 0,
+            next_change: None,
+            active: Vec::new(),
+            current: None
+        }
+    }
+}
+
+impl Filter for RandomArp {
+    fn activate(&mut self, beat: u64, _handle: &JackHandle) {
+        if self.current.is_some() {
+            panic!("RandomArp::activate without resolve.")
+        }
+        self.current = Some(beat);
+    }
+
+    fn push(&mut self, note: &Note, _handle: &JackHandle) {
+        let beat = self.current.expect("RandomArp::push without activate.");
+        self.active.push((beat + note.dur as u64, note.pch, note.vel));
+    }
+
+    fn resolve(&mut self, handle: &JackHandle) -> bool {
+        let beat = self.current.expect("RandomArp::resolve without activate.");
+        self.current = None;
+
+        let change = match self.next_change {
+            None => true,
+            Some((change_beat, pch)) => {
+                if change_beat == beat {
+                    handle.send_midi(MidiMsg::Off(self.channel, pch));
+                    true
+                } else {
+                    false
+                }
+            }
+        };
+
+        if change {
+            let dur = self.durations[self.next_dur];
+            self.next_dur = (self.next_dur + 1) % self.durations.len();
+            let active = mem::take(&mut self.active);
+            for tup in active {
+                if tup.0 <= beat { continue; }
+                self.active.push(tup);
+            }
+            if self.active.len() == 0 { return false; }
+            let mut rng = rand::thread_rng();
+            let i = rng.gen_range(0, self.active.len());
+            let (_, pch, vel) = self.active[i];
+            handle.send_midi(MidiMsg::On(self.channel, pch, vel));
+            self.next_change = Some((beat + dur, pch));
+        }
+
         true
     }
 

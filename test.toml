@@ -32,6 +32,10 @@ program = 0
 program = 0
 note_filter = "solo"
 
+[channel.2]
+program = 8
+note_filter = "random:4:4:6"
+
 [channel.18]
 bank = 0
 program = 0
