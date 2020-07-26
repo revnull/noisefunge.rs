@@ -8,10 +8,36 @@ use crate::config::{FungedConfig};
 use crate::befunge::{EventLog, Note};
 use crate::jack::{JackHandle, MidiMsg};
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum Dir {
+    Up,
+    Down,
+    Bi
+}
+
+#[derive(Debug)]
 pub enum FilterSpec {
     Basic,
     Solo,
     RandomArp(Rc<[u64]>),
+    Arp(Dir, Rc<[u64]>),
+}
+
+fn parse_durs(v: Vec<&str>) -> Result<Rc<[u64]>, String> {
+    if v.len() == 1 {
+        return Err("random needs at least one argument".to_string());
+    }
+
+    let mut durs = Vec::new();
+
+    for s in v.iter().skip(1) {
+        match s.parse::<u64>() {
+            Ok(d) => durs.push(d),
+            Err(e) => return Err(format!("Bad argument: {:?}", e))
+        }
+    }
+
+    Ok(durs.into())
 }
 
 impl FilterSpec {
@@ -30,22 +56,17 @@ impl FilterSpec {
         }
 
         if v[0] == "random" {
-            if v.len() == 1 {
-                return Err("random needs at least one argument".to_string());
-            }
-            let mut durs = Vec::new();
-
-            for s in v.iter().skip(1) {
-                match s.parse::<u64>() {
-                    Ok(d) => durs.push(d),
-                    Err(e) => return Err(format!("Bad argument: {:?}", e))
-                }
-            }
-
-            return Ok(FilterSpec::RandomArp(durs.into()))
+            return Ok(FilterSpec::RandomArp(parse_durs(v)?));
         }
 
-        Err(format!("Unrecognized note filter: {}", input))
+        let dir = match v[0] {
+            "up" => Dir::Up,
+            "down" => Dir::Down,
+            "bi" => Dir::Bi,
+            _ => return Err(format!("Unrecognized note filter: {}", input))
+        };
+
+        Ok(FilterSpec::Arp(dir, parse_durs(v)?))
     }
 
     fn to_filter(&self, channel: u8) -> Box<dyn Filter> {
@@ -54,6 +75,8 @@ impl FilterSpec {
             FilterSpec::Solo => Box::new(Solo::new(channel)),
             FilterSpec::RandomArp(durs) =>
                 Box::new(RandomArp::new(channel, durs.clone())),
+            FilterSpec::Arp(dir, durs) =>
+                Box::new(Arp::new(channel, *dir, durs.clone())),
         }
     }
 }
@@ -207,7 +230,6 @@ impl Filter for Solo {
 
 }
 
-
 // Random Arpeggiator - takes a slice of u64 as a cycle for durtions.
 struct RandomArp {
     channel: u8,
@@ -279,6 +301,168 @@ impl Filter for RandomArp {
         true
     }
 
+}
+
+
+// Arp - Up, Down, or Bidirectional
+struct Arp {
+    channel: u8,
+    direction: Dir,
+    current_direction: Dir,
+    durations: Rc<[u64]>,
+    next_dur: usize,
+    next_change: Option<(u64, u8)>, // Change beat, current pch
+    active: Vec<(u64, u8, u8)>,
+    pending: Vec<(u64, u8, u8)>,
+    current: Option<u64>
+}
+
+impl Arp {
+    fn new(channel: u8, direction: Dir, durations: Rc<[u64]>) -> Arp {
+        let current_dir = match direction {
+            Dir::Down => Dir::Down,
+            _ => Dir::Up
+        };
+        Arp {
+            channel: channel,
+            direction: direction,
+            current_direction: current_dir,
+            durations: durations,
+            next_dur: 0,
+            next_change: None,
+            active: Vec::new(),
+            pending: Vec::new(),
+            current: None
+        }
+    }
+}
+
+impl Filter for Arp {
+    fn activate(&mut self, beat: u64, _handle: &JackHandle) {
+        if self.current.is_some() {
+            panic!("Arp::activate without resolve")
+        }
+        self.current = Some(beat)
+    }
+
+    fn push(&mut self, note: &Note, _handle: &JackHandle) {
+        let beat = self.current.expect("Arp::push without activate.");
+        self.pending.push((beat + note.dur as u64, note.pch, note.vel));
+    }
+
+    fn resolve(&mut self, handle: &JackHandle) -> bool {
+        let beat = self.current.expect("Arp::resolve without activate.");
+        self.current = None;
+
+        let oldpch = match self.next_change {
+            None => None,
+            Some((change_beat, pch)) => {
+                if change_beat == beat {
+                    handle.send_midi(MidiMsg::Off(self.channel, pch));
+                    Some(pch)
+                } else {
+                    return true;
+                }
+            }
+        };
+
+        let dur = self.durations[self.next_dur];
+        self.next_dur = (self.next_dur + 1) % self.durations.len();
+
+        let mut indexes = BTreeMap::new();
+        let mut pending = mem::take(&mut self.pending);
+        pending.sort_by(|a,b| a.1.cmp(&b.1)); // Sort by pitch
+        let active = mem::take(&mut self.active);
+        let mut iter_a = active.iter().filter(|t| t.0 > beat).peekable();
+        let mut iter_b = pending.iter().filter(|t| t.0 > beat).peekable();
+
+        loop {
+            let peek_a = iter_a.peek();
+            let peek_b = iter_b.peek();
+            let to_push = match (peek_a, peek_b) {
+                (None, None) => break,
+                (Some(_), None) => {
+                    *iter_a.next().unwrap()
+                },
+                (None, Some(_)) => {
+                    *iter_b.next().unwrap()
+                },
+                (Some(a), Some(b)) => {
+                    if a.1 <= b.1 {
+                        *iter_a.next().unwrap()
+                    } else {
+                        *iter_b.next().unwrap()
+                    }
+                }
+            };
+            indexes.entry(to_push.1).or_insert(self.active.len());
+            self.active.push(to_push);
+        }
+
+        if self.active.is_empty() { return false }
+
+        if oldpch.is_none() {
+            let i = match self.current_direction {
+                Dir::Up => 0,
+                Dir::Down => self.active.len() - 1,
+                _ => panic!("invalid current_direction")
+            };
+            let (_, pch, vel) = self.active[i];
+            handle.send_midi(MidiMsg::On(self.channel, pch, vel));
+            self.next_change = Some((beat + dur, pch));
+            return true;
+        }
+
+        let oldpch = oldpch.unwrap();
+        let old_i = indexes.get(&oldpch);
+        let i = match self.current_direction {
+            Dir::Up => {
+                match indexes.range(oldpch+1..128).next() {
+                    Some((_, i)) => *i,
+                    None => {
+                        match (self.direction, old_i) {
+                            (Dir::Up, _) => 0, // reset to 0
+                            (Dir::Bi, Some(0)) => 0, // only one pch
+                            (Dir::Bi, Some(i)) => {
+                                self.current_direction = Dir::Down;
+                                i - 1
+                            },
+                            (Dir::Bi, None) => {
+                                self.current_direction = Dir::Down;
+                                self.active.len() - 1
+                            },
+                            _ => panic!("Bad self.direction"),
+                        }
+                    }
+                }
+            },
+            Dir::Down => {
+                match old_i {
+                    Some(i) if *i > 0 => { i - 1 },
+                    _ => {
+                        match (self.direction, indexes.range(0..oldpch).last()) {
+                            (_, Some((_, i))) => { *i },
+                            (Dir::Down, None) => self.active.len() - 1, // Reset to end
+                            (Dir::Bi, _) => {
+                                self.current_direction = Dir::Up;
+                                match indexes.range(oldpch+1..128).next() {
+                                    None => 0,
+                                    Some((_, i)) => *i
+                                }
+                            }
+                            _ => panic!("Bad self.direction")
+                        }
+                    }
+                }
+            },
+            _ => panic!("Invalid current_direction"),
+        };
+
+        let (_, pch, vel) = self.active[i];
+        handle.send_midi(MidiMsg::On(self.channel, pch, vel));
+        self.next_change = Some((beat + dur, pch));
+        true
+    }
 }
 
 pub struct MidiBridge<'a> {
