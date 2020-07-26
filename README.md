@@ -1,4 +1,4 @@
-# Noisefunge 2, AKA Noisefunge.rs
+# Noisefunge.rs
 
 A reimplementation of noisefunge in rust. This is likely to become the
 standard implementation of the language.
@@ -10,3 +10,4 @@ standard implementation of the language.
  * Configuration file can be used to automatically send program select messages.
  * New semantics for defining custom opcodes.
  * Unicode support in the viewer so that all 256 byte values have a printable representation.
+ * Built in arpeggiators.
