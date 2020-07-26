@@ -4,6 +4,8 @@ use arr_macro::arr;
 use jack::*;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use crossbeam_channel::{bounded, Sender, Receiver};
 
 use crate::config::{FungedConfig, ChannelConfig};
@@ -79,6 +81,7 @@ impl<'a> PortMap {
 
 pub struct JackHandle {
     pub beat_channel: Receiver<u64>,
+    missed_beats: Arc<AtomicU64>,
     note_channel: Sender<MidiMsg>,
     deactivate: Box<dyn FnOnce()>,
 }
@@ -95,6 +98,8 @@ impl JackHandle {
         let bi_name = &beats_in.name().unwrap();
         let mut locals = HashMap::new();
         let mut locals2 = HashMap::new();
+        let missed = Arc::new(AtomicU64::new(0));
+        let missed2 = missed.clone();
 
         for name in &conf.locals {
             let port = client.register_port(name, MidiOut::default())
@@ -118,7 +123,11 @@ impl JackHandle {
                         if bin.bytes[0] == 248 {
                             let t = bin.time;
                             i += 1;
-                            snd2.try_send(i).expect("try_send failed");
+                            match snd2.try_send(i) {
+                                Ok(_) => (),
+                                Err(e) if e.is_full() => { missed2.fetch_add(1, Ordering::Relaxed); },
+                                _ => panic!("try_send failed due to disconnect.")
+                            }
                             for msg in r1.try_iter() {
                                 match msg {
                                     MidiMsg::On(ch, pch, vel) => {
@@ -196,12 +205,13 @@ impl JackHandle {
         }
 
         JackHandle { beat_channel: rcv2,
+                     missed_beats: missed,
                      note_channel: snd1,
                      deactivate: deact }
     }
 
-    pub fn next_beat(&self) -> u64 {
-        self.beat_channel.recv().expect("Failed to receive from jack thread.")
+    pub fn missed(&self) -> u64 {
+        self.missed_beats.load(Ordering::Relaxed)
     }
 
     pub fn send_midi(&self, msg: MidiMsg) -> bool {

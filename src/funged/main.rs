@@ -93,6 +93,7 @@ fn main() {
         FungedConfig::read_config(&read_args()));
 
     let handle = JackHandle::new(&server.config);
+    let mut prev_missed = 0;
     let mut bridge = MidiBridge::new(&server.config, &handle);
     let http_serv = ServerHandle::new(&server.config);
     let mut prev_i = 0;
@@ -109,6 +110,11 @@ fn main() {
                 };
                 server.update_state();
                 prev_i = i;
+                let missed = handle.missed();
+                if missed != prev_missed {
+                    eprintln!("Missed {} beats", missed - prev_missed); 
+                    prev_missed = missed;
+                }
             },
             recv(http_serv.channel) -> msg => {
                 match msg {
