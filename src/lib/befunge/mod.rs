@@ -517,5 +517,16 @@ mod tests {
             EventLog::PrintNum(4, 2),
             EventLog::PrintNum(5, 2),
             ], 10);
+
+        // Test wrapping math.
+        eng.make_process(Prog::parse(">1Fh2Fh+&@").unwrap());
+        eng.make_process(Prog::parse(">4A-&@").unwrap());
+        eng.make_process(Prog::parse(">09h3*&@").unwrap());
+
+        expect_unordered(&mut eng, vec![
+            EventLog::PrintNum(6, 227),
+            EventLog::PrintNum(7, 250),
+            EventLog::PrintNum(8, 176),
+            ], 20);
     }
 }
