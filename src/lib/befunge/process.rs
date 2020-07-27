@@ -117,12 +117,22 @@ pub enum ProcessState {
     Killed
 }
 
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Hash, Serialize,
+         Deserialize)]
 pub struct Note {
     pub cha: u8,
     pub pch: u8,
     pub vel: u8,
     pub dur: u8
+}
+
+impl Note {
+    pub fn new(cha: u8, pch: u8, vel: u8, dur: u8) -> Self {
+        Note { cha: cha,
+               pch: pch,
+               vel: vel,
+               dur: dur }
+    }
 }
 
 #[derive(Clone)]

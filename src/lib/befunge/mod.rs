@@ -9,6 +9,7 @@ use crate::api::{EngineState, ProcState};
 
 use arr_macro::arr;
 use std::collections::{BTreeMap, HashSet, HashMap, VecDeque};
+use std::iter::FromIterator;
 use std::mem;
 use std::rc::Rc;
 use serde::{Serialize, Deserialize};
@@ -102,7 +103,7 @@ pub struct Engine {
     charmap: CharMap,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum EventLog {
     NewProcess(u64),
     PrintChar(u64, u8),
@@ -439,6 +440,41 @@ impl Engine {
 mod tests {
     use super::*;
 
+    fn expect_ordered(eng: &mut Engine, expect: Vec<EventLog>,
+                      max_steps: u16) -> u64 {
+        let mut expect = VecDeque::from(expect);
+        for _i in 0..max_steps {
+            let (beat, log) = eng.step();
+            for l in log {
+                match expect.front() {
+                    None => break,
+                    Some(ex) if *ex == l => { expect.pop_front(); },
+                    Some(_) => { println!("Unmatched event: {:?}", l); }
+                }
+            }
+            if expect.is_empty() { return beat }
+        }
+
+        panic!("Remaining events: {:?}", expect);
+    }
+
+    fn expect_unordered(eng: &mut Engine, expect: Vec<EventLog>,
+                        max_steps: u16) -> u64 {
+        let mut expect: HashSet<EventLog> =
+            HashSet::from_iter(expect.iter().cloned());
+
+        for _i in 0..max_steps {
+            let (beat, log) = eng.step();
+            for l in log {
+                if !expect.remove(&l) {
+                    println!("Unexpected event: {:?}", l);
+                }
+            }
+            if expect.is_empty() { return beat }
+        }
+        panic!("Remaining events: {:?}", expect);
+    }
+
     #[test]
     fn send_receive_basic() {
         let mut eng = Engine::new(24);
@@ -446,11 +482,40 @@ mod tests {
             .expect("Parse failed."));
         eng.make_process(Prog::parse(">0~ &@")
             .expect("Parse failed."));
-        for _i in 1..7  {
-            assert_eq!(eng.step().1, vec![]);
-        }
-        assert_eq!(eng.step().1, vec![EventLog::Finished(1)]);
-        assert_eq!(eng.step().1, vec![EventLog::PrintNum(2, 5)]);
-        assert_eq!(eng.step().1, vec![EventLog::Finished(2)]);
+        assert_eq!(8, expect_ordered(&mut eng, vec![
+            EventLog::Finished(1),
+            EventLog::PrintNum(2, 5),
+            EventLog::Finished(2)], 20));
+    }
+
+    #[test]
+    fn test_note_buf() {
+        let mut eng = Engine::new(24);
+        eng.make_process(Prog::parse(">10h05n4A*9zZU1+uZW1+wZX1+xZY1+yZ@")
+            .expect("Parse failed."));
+
+        expect_ordered(&mut eng, vec![
+            EventLog::Play(Note::new(1,60,40,9)),
+            EventLog::Play(Note::new(1,60,40,10)),
+            EventLog::Play(Note::new(1,60,41,10)),
+            EventLog::Play(Note::new(1,61,41,10)),
+            EventLog::Play(Note::new(2,61,41,10))], 50);
+    }
+
+    #[test]
+    fn test_math_ops() {
+        let mut eng = Engine::new(24);
+        eng.make_process(Prog::parse(">45+&@").unwrap());
+        eng.make_process(Prog::parse(">A4-&@").unwrap());
+        eng.make_process(Prog::parse(">45*&@").unwrap());
+        eng.make_process(Prog::parse(">52/&@").unwrap());
+        eng.make_process(Prog::parse(">B3%&@").unwrap());
+        expect_unordered(&mut eng, vec![
+            EventLog::PrintNum(1, 9),
+            EventLog::PrintNum(2, 6),
+            EventLog::PrintNum(3, 20),
+            EventLog::PrintNum(4, 2),
+            EventLog::PrintNum(5, 2),
+            ], 10);
     }
 }
