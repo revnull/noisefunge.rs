@@ -129,7 +129,7 @@ impl Tiler {
         self.needs_redraw = true;
 
         for (pid, msg) in &self.state.crashed {
-            self.errors.push_str(&format!("{}: {:?}. ", pid, msg));
+            self.errors.push_str(&format!("{:X}: {:?}. ", pid, msg));
         }
 
         let state_progs = mem::take(&mut self.state.progs);
