@@ -9,7 +9,6 @@ use crate::api::{EngineState, ProcState};
 
 use arr_macro::arr;
 use std::collections::{BTreeMap, HashSet, HashMap, VecDeque};
-use std::iter::FromIterator;
 use std::mem;
 use std::rc::Rc;
 use serde::{Serialize, Deserialize};
@@ -439,6 +438,7 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter::FromIterator;
 
     fn expect_ordered(eng: &mut Engine, expect: Vec<EventLog>,
                       max_steps: u16) -> u64 {
@@ -528,5 +528,25 @@ mod tests {
             EventLog::PrintNum(7, 250),
             EventLog::PrintNum(8, 176),
             ], 20);
+    }
+
+    #[test]
+    fn test_fork() {
+        let mut eng = Engine::new(24);
+        eng.make_process(Prog::parse(">ff2*+&@").unwrap());
+
+        expect_unordered(&mut eng, vec![
+            EventLog::NewProcess(2),
+            EventLog::NewProcess(3),
+            EventLog::NewProcess(4),
+            EventLog::PrintNum(1,0),
+            EventLog::PrintNum(2,1),
+            EventLog::PrintNum(3,2),
+            EventLog::PrintNum(4,3),
+            EventLog::Finished(1),
+            EventLog::Finished(2),
+            EventLog::Finished(3),
+            EventLog::Finished(4),
+            ], 10);
     }
 }
