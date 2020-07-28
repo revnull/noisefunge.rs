@@ -119,7 +119,7 @@ fn main() {
             recv(http_serv.channel) -> msg => {
                 match msg {
                     Ok(req) => server.handle(req),
-                    Err(e) => println!("Unknown error: {:?}", e),
+                    Err(e) => panic!("Server error: {:?}", e),
                 };
             }
         }
