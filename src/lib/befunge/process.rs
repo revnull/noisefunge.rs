@@ -108,12 +108,21 @@ pub enum Syscall {
     Quantize(u8),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
+pub enum CrashReason {
+    OutOfBounds(Option<u8>), // optional opcode
+    InvalidOpcode(u8),
+    PopFromEmptyStack,
+    InvalidQuantize,
+    DivideByZero
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ProcessState {
     Running(bool),
     Trap(Syscall),
     Finished,
-    Crashed(String),
+    Crashed(CrashReason),
     Killed
 }
 
@@ -220,10 +229,8 @@ impl Process {
         self.data_stack.pop()
     }
 
-    pub fn die<T>(&mut self, msg: T)
-        where T: ToString
-    {
-        self.state = ProcessState::Crashed(msg.to_string())
+    pub fn die(&mut self, reason: CrashReason) {
+        self.state = ProcessState::Crashed(reason)
     }
 
     pub fn kill(&mut self) -> ProcessState {
@@ -246,28 +253,28 @@ impl Process {
                 match top.dir {
                     Dir::L => {
                         if i % w == 0 {
-                            self.die("Exited off left edge");
+                            self.die(CrashReason::OutOfBounds(None));
                             return;
                         }
                         top.pc = PC(i - 1);
                     },
                     Dir::R => {
                         if i % w == (w - 1) {
-                            self.die("Exited off right edge");
+                            self.die(CrashReason::OutOfBounds(None));
                             return;
                         }
                         top.pc = PC(i + 1);
                     }
                     Dir::U => {
                         if i / w == 0 {
-                            self.die("Exited off top edge");
+                            self.die(CrashReason::OutOfBounds(None));
                             return;
                         }
                         top.pc = PC(i - w);
                     },
                     Dir::D => {
                         if i / w == h - 1 {
-                            self.die("Exited off bottom edge");
+                            self.die(CrashReason::OutOfBounds(None));
                             return;
                         }
                         top.pc = PC(i + w);

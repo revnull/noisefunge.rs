@@ -2,14 +2,15 @@ use rand::Rng;
 use std::rc::Rc;
 use arr_macro::arr;
 
-use super::process::{Process, ProcessState, Syscall, Dir, Op, Note};
+use super::process::{Process, ProcessState, Syscall, Dir, Op, Note,
+                     CrashReason};
 
 macro_rules! pop {
     ($proc : ident) => {
         match $proc.pop() {
             Some(u) => u,
             None => {
-                $proc.die("Pop from empty stack.");
+                $proc.die(CrashReason::PopFromEmptyStack);
                 return
             }
         }
@@ -189,7 +190,7 @@ impl OpSet {
             Some(c) => c
         };
         match &ops[c as usize] {
-            None => { proc.die(format!("Unknown op 0x{:X}", c)); }
+            None => { proc.die(CrashReason::InvalidOpcode(c)); }
             Some(op) => proc.apply(op)
         }
     }
@@ -270,7 +271,7 @@ fn quantize(proc: &mut Process) {
 fn quantize_n(proc: &mut Process) {
     let q = pop!(proc);
     if q == 0 {
-        proc.die("Can't quantize on 0 beats.");
+        proc.die(CrashReason::InvalidQuantize);
     } else {
         proc.trap(Syscall::Quantize(q));
     }
@@ -296,7 +297,7 @@ fn call(proc: &mut Process) {
     let prog = &proc.top().unwrap().memory;
     match prog.xy_to_pc(x, y).map(|pc| prog.lookup(pc)) {
         Some(c) => proc.trap(Syscall::Call(c)),
-        None => proc.die("Call exceeded bounds"),
+        None => proc.die(CrashReason::OutOfBounds(Some(99))),
     }
 }
 
@@ -309,7 +310,7 @@ fn goto(proc: &mut Process) {
             top.pc = pc;
             proc.trap(Syscall::Pause);
         }
-        None => proc.die("Call exceeded bounds"),
+        None => proc.die(CrashReason::OutOfBounds(Some(71))),
     }
 }
 
@@ -460,7 +461,7 @@ fn put(proc: &mut Process) {
     let pc = match top.memory.xy_to_pc(x, y) {
         Some(pc) => pc,
         None => {
-            proc.die("Put outside of bounds.");
+            proc.die(CrashReason::OutOfBounds(Some(112)));
             return
         }
     };
@@ -475,7 +476,7 @@ fn get(proc: &mut Process) {
     let pc = match top.memory.xy_to_pc(x, y) {
         Some(pc) => pc,
         None => {
-            proc.die("Get outside of bounds.");
+            proc.die(CrashReason::OutOfBounds(Some(103)));
             return
         }
     };

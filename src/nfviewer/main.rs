@@ -128,6 +128,10 @@ impl Tiler {
         self.state = state;
         self.needs_redraw = true;
 
+        for (pid, msg) in &self.state.crashed {
+            self.errors.push_str(&format!("{}: {:?}. ", pid, msg));
+        }
+
         let state_progs = mem::take(&mut self.state.progs);
         let prog_set = mem::take(&mut self.prog_set);
         self.progs = Vec::new();

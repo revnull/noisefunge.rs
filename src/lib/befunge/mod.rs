@@ -100,6 +100,7 @@ pub struct Engine {
     killed: HashSet<u64>,
     ops: OpSet,
     charmap: CharMap,
+    crash_log: Vec<(u64, CrashReason)>
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
@@ -109,7 +110,7 @@ pub enum EventLog {
     PrintNum(u64, u8),
     Play(Note),
     Finished(u64),
-    Crashed(u64, String),
+    Crashed(u64, CrashReason),
     Killed(u64)
 }
 
@@ -126,7 +127,8 @@ impl Engine {
                  all_killed: false,
                  killed: HashSet::new(),
                  ops: OpSet::default(),
-                 charmap: CharMap::default() }
+                 charmap: CharMap::default(),
+                 crash_log: Vec::new() }
     }
 
     fn new_pid(&mut self) -> u64 {
@@ -172,6 +174,7 @@ impl Engine {
         let killed = mem::take(&mut self.killed);
         let oldbeat = self.beat;
         self.beat += 1;
+        self.crash_log = Vec::new();
 
         if all_killed {
             for pid in self.procs.keys() {
@@ -214,7 +217,7 @@ impl Engine {
             match proc.state() {
                 ProcessState::Running(true) => {
                     match proc.peek() {
-                        None => proc.die("Proc ran out of bounds"),
+                        None => proc.die(CrashReason::OutOfBounds(None)),
                         Some(34) => proc.set_state(
                             ProcessState::Running(false)),
                         Some(c) => proc.push(c)
@@ -255,6 +258,11 @@ impl Engine {
                         match &proc.state() {
                             ProcessState::Running(_) =>
                                 self.active.push(proc.pid),
+                            ProcessState::Crashed(msg) => {
+                                log.push(EventLog::Crashed(proc.pid, *msg));
+                                self.crash_log.push((proc.pid, *msg));
+                                dead.push(proc.pid);
+                            },
                             _ => dead.push(proc.pid),
                         }
                     },
@@ -372,8 +380,9 @@ impl Engine {
                         dead.push(proc.pid);
                     },
                     ProcessState::Crashed(msg) => {
-                        log.push(EventLog::Crashed(proc.pid, msg.clone()));
+                        log.push(EventLog::Crashed(proc.pid, *msg));
                         dead.push(proc.pid);
+                        self.crash_log.push((proc.pid, *msg));
                     },
                     ProcessState::Killed => {
                         dead.push(proc.pid);
@@ -429,7 +438,8 @@ impl Engine {
                       progs: progs,
                       procs: procs,
                       sleeping: self.sleeping.len(),
-                      buffers: buffers
+                      buffers: buffers,
+                      crashed: self.crash_log.clone(),
                     }
     }
 

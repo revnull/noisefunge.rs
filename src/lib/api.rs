@@ -1,4 +1,6 @@
 
+use crate::befunge::CrashReason;
+
 use std::collections::{BTreeMap, HashMap};
 use serde::{Serialize, Deserialize};
 
@@ -24,7 +26,8 @@ pub struct EngineState {
     pub progs: Vec<(usize, String)>,
     pub procs: HashMap<u64, ProcState>,
     pub sleeping: usize,
-    pub buffers: BTreeMap<u8, i64>
+    pub buffers: BTreeMap<u8, i64>,
+    pub crashed: Vec<(u64, CrashReason)>
 }
 
 impl EngineState {
@@ -34,7 +37,8 @@ impl EngineState {
             progs: Vec::new(),
             procs: HashMap::new(),
             sleeping: 0,
-            buffers: BTreeMap::new()
+            buffers: BTreeMap::new(),
+            crashed: Vec::new(),
         }
     }
 }
