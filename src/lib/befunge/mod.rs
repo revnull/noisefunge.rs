@@ -559,4 +559,47 @@ mod tests {
             EventLog::Finished(4),
             ], 10);
     }
+
+    #[test]
+    fn test_goto() {
+        let mut eng = Engine::new(24);
+        eng.make_process(Prog::parse("> 11G 2&@\n\
+                                      @>3&@").unwrap());
+
+        expect_ordered(&mut eng, vec![
+            EventLog::PrintNum(1, 3),
+            ], 10);
+        
+        eng.make_process(Prog::parse(">11G").unwrap());
+        expect_ordered(&mut eng, vec![
+            EventLog::Crashed(2, CrashReason::OutOfBounds(Some(71))),
+            ], 10);
+
+    }
+
+    #[test]
+    fn test_put_get_call() {
+        let mut eng = Engine::new(24);
+        eng.make_process(Prog::parse(">63h70p &@").unwrap());
+        expect_ordered(&mut eng, vec![
+            EventLog::PrintNum(1, 6),
+            ], 10);
+        eng.make_process(Prog::parse(">#820g&@").unwrap());
+        expect_ordered(&mut eng, vec![
+            EventLog::PrintNum(2, 56),
+            ], 10);
+        eng.make_process(Prog::parse(">#820c&@").unwrap());
+        expect_ordered(&mut eng, vec![
+            EventLog::PrintNum(3, 8),
+            ], 10);
+        eng.make_process(Prog::parse(">511p@").unwrap());
+        eng.make_process(Prog::parse(">11g@").unwrap());
+        eng.make_process(Prog::parse(">11c@").unwrap());
+        expect_unordered(&mut eng, vec![
+            EventLog::Crashed(4, CrashReason::OutOfBounds(Some(112))),
+            EventLog::Crashed(5, CrashReason::OutOfBounds(Some(103))),
+            EventLog::Crashed(6, CrashReason::OutOfBounds(Some(99))),
+            ], 10);
+    }
+
 }
