@@ -165,7 +165,7 @@ impl Tiler {
         let (width, text) = &self.progs[proc.prog];
         let display_width = cmp::max(min_width, *width + 1);
 
-        let height = cmp::max(min_height, (text.chars().count() / width) + 1);
+        let height = cmp::max(min_height, (text.chars().count() / width) + 2);
 
         if display_width > max_width || height > max_height {
             return None;
@@ -224,9 +224,13 @@ impl Tiler {
         }
 
         window.color_set(6);
-        window.mvaddstr((y + height - 2) as i32, x as i32, &pid_str);
+        window.mvaddstr((y + height - 3) as i32, x as i32, &pid_str);
+        if let Some(i) = proc.name {
+            window.mvaddnstr((y + height - 2) as i32, x as i32,
+                             &self.state.names[i], (display_width - 1) as i32);
+        }
         window.color_set(2);
-        window.mvaddstr((y + height - 2) as i32, (x + pid_str.len()) as i32,
+        window.mvaddstr((y + height - 3) as i32, (x + pid_str.len()) as i32,
                         &buffer);
         window.color_set(0);
 
