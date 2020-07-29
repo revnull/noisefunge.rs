@@ -41,7 +41,7 @@ impl<T> Responder<T> {
 
 #[derive(Debug)]
 pub enum FungeRequest {
-    StartProcess(String, Responder<Result<u64,String>>),
+    StartProcess(Option<String>, String, Responder<Result<u64,String>>),
     GetState(Option<u64>, Responder<Option<Arc<Vec<u8>>>>),
     Kill(Vec<u64>)
 }
@@ -63,10 +63,11 @@ fn kill(sender: &Sender<FungeRequest>, request: &Request) -> Response {
 }
 
 fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
-    let data = try_or_400!(rouille::input::plain_text_body(&request));
+    let data: NewProcessReq = try_or_400!(rouille::input::json_input(&request));
 
     let responder = Responder::new();
-    sender.send(FungeRequest::StartProcess(data, responder.clone()))
+    sender.send(FungeRequest::StartProcess(data.name, data.program,
+                                           responder.clone()))
           .expect("Sender::send failed");
 
     Response::json(&NewProcessResp { pid: responder.wait().unwrap() })

@@ -46,9 +46,9 @@ impl FungedServer {
 
     fn handle(&mut self, request: FungeRequest) {
         match request {
-            StartProcess(prog, rspndr) =>
+            StartProcess(name, prog, rspndr) =>
                 rspndr.respond(match Prog::parse(&prog) {
-                    Ok(p) => Ok(self.engine.make_process(p)),
+                    Ok(p) => Ok(self.engine.make_process(name, p)),
                     Err(e) => Err(e.to_string())
                 }),
             GetState(prev, rspndr) => {

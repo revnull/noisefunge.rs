@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewProcessReq {
+    pub name: Option<String>,
     pub program: String
 }
 

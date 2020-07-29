@@ -39,10 +39,12 @@ fn main() {
                                   .build()
                                   .expect("Failed to build client.");
 
+    let body = serde_json::to_string(&NewProcessReq { name: Some(filename),
+                                                      program: prog }).unwrap();
     let path = format!("{}process", baseuri);
     let request = client.post(&path)
-                        .body(prog)
-                        .header("Content-Type", "text/plain")
+                        .body(body)
+                        .header("Content-Type", "application/json")
                         .timeout(Duration::from_secs(4))
                         .build()
                         .expect("Failed to build request");

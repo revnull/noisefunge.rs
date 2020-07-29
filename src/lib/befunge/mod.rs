@@ -93,6 +93,7 @@ pub struct Engine {
     next_pid: u64,
     progs: HashSet<Rc<Prog>>,
     procs: BTreeMap<u64,Process>,
+    process_names: HashSet<Rc<str>>,
     buffers: [MessageQueue; 256],
     active: Vec<u64>,
     sleeping: Vec<(u64, u32)>,
@@ -121,6 +122,7 @@ impl Engine {
                  next_pid: 1,
                  progs: HashSet::new(),
                  procs: BTreeMap::new(),
+                 process_names: HashSet::new(),
                  buffers: arr![MessageQueue::Empty; 256],
                  active: Vec::new(),
                  sleeping: Vec::new(),
@@ -145,7 +147,7 @@ impl Engine {
         self.all_killed = true
     }
 
-    pub fn make_process(&mut self, prog: Prog) -> u64 {
+    pub fn make_process(&mut self, name: Option<String>, prog: Prog) -> u64 {
         let pid = self.new_pid();
 
         let rcprog = Rc::new(prog);
@@ -157,7 +159,18 @@ impl Engine {
             Some(p) => Rc::clone(p)
         };
 
-        let proc = Process::new(pid, prog);
+        let name = name.map(|n| {
+            let rcname = Rc::from(n);
+            match self.process_names.get(&rcname) {
+                Some(n) => Rc::clone(n),
+                None => {
+                    self.process_names.insert(Rc::clone(&rcname));
+                    rcname
+                }
+            }
+        });
+
+        let proc = Process::new(pid, name, prog);
 
         self.procs.insert(pid, proc);
         self.active.push(pid);
@@ -488,9 +501,9 @@ mod tests {
     #[test]
     fn send_receive_basic() {
         let mut eng = Engine::new(24);
-        eng.make_process(Prog::parse(">  50.@")
+        eng.make_process(None, Prog::parse(">  50.@")
             .expect("Parse failed."));
-        eng.make_process(Prog::parse(">0~ &@")
+        eng.make_process(None, Prog::parse(">0~ &@")
             .expect("Parse failed."));
         assert_eq!(8, expect_ordered(&mut eng, vec![
             EventLog::Finished(1),
@@ -501,7 +514,7 @@ mod tests {
     #[test]
     fn test_note_buf() {
         let mut eng = Engine::new(24);
-        eng.make_process(Prog::parse(">10h05n4A*9zZU1+uZW1+wZX1+xZY1+yZ@")
+        eng.make_process(None, Prog::parse(">10h05n4A*9zZU1+uZW1+wZX1+xZY1+yZ@")
             .expect("Parse failed."));
 
         expect_ordered(&mut eng, vec![
@@ -515,11 +528,11 @@ mod tests {
     #[test]
     fn test_math_ops() {
         let mut eng = Engine::new(24);
-        eng.make_process(Prog::parse(">45+&@").unwrap());
-        eng.make_process(Prog::parse(">A4-&@").unwrap());
-        eng.make_process(Prog::parse(">45*&@").unwrap());
-        eng.make_process(Prog::parse(">52/&@").unwrap());
-        eng.make_process(Prog::parse(">B3%&@").unwrap());
+        eng.make_process(None, Prog::parse(">45+&@").unwrap());
+        eng.make_process(None, Prog::parse(">A4-&@").unwrap());
+        eng.make_process(None, Prog::parse(">45*&@").unwrap());
+        eng.make_process(None, Prog::parse(">52/&@").unwrap());
+        eng.make_process(None, Prog::parse(">B3%&@").unwrap());
         expect_unordered(&mut eng, vec![
             EventLog::PrintNum(1, 9),
             EventLog::PrintNum(2, 6),
@@ -529,9 +542,9 @@ mod tests {
             ], 10);
 
         // Test wrapping math.
-        eng.make_process(Prog::parse(">1Fh2Fh+&@").unwrap());
-        eng.make_process(Prog::parse(">4A-&@").unwrap());
-        eng.make_process(Prog::parse(">09h3*&@").unwrap());
+        eng.make_process(None, Prog::parse(">1Fh2Fh+&@").unwrap());
+        eng.make_process(None, Prog::parse(">4A-&@").unwrap());
+        eng.make_process(None, Prog::parse(">09h3*&@").unwrap());
 
         expect_unordered(&mut eng, vec![
             EventLog::PrintNum(6, 227),
@@ -543,7 +556,7 @@ mod tests {
     #[test]
     fn test_fork() {
         let mut eng = Engine::new(24);
-        eng.make_process(Prog::parse(">ff2*+&@").unwrap());
+        eng.make_process(None, Prog::parse(">ff2*+&@").unwrap());
 
         expect_unordered(&mut eng, vec![
             EventLog::NewProcess(2),
@@ -563,14 +576,14 @@ mod tests {
     #[test]
     fn test_goto() {
         let mut eng = Engine::new(24);
-        eng.make_process(Prog::parse("> 11G 2&@\n\
-                                      @>3&@").unwrap());
+        eng.make_process(None, Prog::parse("> 11G 2&@\n\
+                                            @>3&@").unwrap());
 
         expect_ordered(&mut eng, vec![
             EventLog::PrintNum(1, 3),
             ], 10);
         
-        eng.make_process(Prog::parse(">11G").unwrap());
+        eng.make_process(None, Prog::parse(">11G").unwrap());
         expect_ordered(&mut eng, vec![
             EventLog::Crashed(2, CrashReason::OutOfBounds(Some(71))),
             ], 10);
@@ -580,21 +593,21 @@ mod tests {
     #[test]
     fn test_put_get_call() {
         let mut eng = Engine::new(24);
-        eng.make_process(Prog::parse(">63h70p &@").unwrap());
+        eng.make_process(None, Prog::parse(">63h70p &@").unwrap());
         expect_ordered(&mut eng, vec![
             EventLog::PrintNum(1, 6),
             ], 10);
-        eng.make_process(Prog::parse(">#820g&@").unwrap());
+        eng.make_process(None, Prog::parse(">#820g&@").unwrap());
         expect_ordered(&mut eng, vec![
             EventLog::PrintNum(2, 56),
             ], 10);
-        eng.make_process(Prog::parse(">#820c&@").unwrap());
+        eng.make_process(None, Prog::parse(">#820c&@").unwrap());
         expect_ordered(&mut eng, vec![
             EventLog::PrintNum(3, 8),
             ], 10);
-        eng.make_process(Prog::parse(">511p@").unwrap());
-        eng.make_process(Prog::parse(">11g@").unwrap());
-        eng.make_process(Prog::parse(">11c@").unwrap());
+        eng.make_process(None, Prog::parse(">511p@").unwrap());
+        eng.make_process(None, Prog::parse(">11g@").unwrap());
+        eng.make_process(None, Prog::parse(">11c@").unwrap());
         expect_unordered(&mut eng, vec![
             EventLog::Crashed(4, CrashReason::OutOfBounds(Some(112))),
             EventLog::Crashed(5, CrashReason::OutOfBounds(Some(103))),

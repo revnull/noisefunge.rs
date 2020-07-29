@@ -147,6 +147,7 @@ impl Note {
 #[derive(Clone)]
 pub struct Process {
     pub pid: u64,
+    pub name: Option<Rc<str>>,
     data_stack: Vec<u8>,
     call_stack: Vec<ProcessStack>,
     state: ProcessState,
@@ -155,13 +156,14 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(pid: u64, prog: Rc<Prog>) -> Process {
+    pub fn new(pid: u64, name: Option<Rc<str>>, prog: Rc<Prog>) -> Process {
         let st = ProcessStack { memory: prog,
                                 pc: PC(0),
                                 dir: Dir::R };
         let mut stvec = Vec::new();
         stvec.push(st);
         Process { pid: pid,
+                  name: name,
                   data_stack: Vec::new(),
                   call_stack: stvec,
                   state: ProcessState::Running(false),
