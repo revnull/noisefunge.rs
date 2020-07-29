@@ -15,6 +15,7 @@ pub struct NewProcessResp { pub pid: u64 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProcState {
+    pub name: Option<usize>,
     pub prog: usize,
     pub pc: usize,
     pub active: bool,
@@ -24,6 +25,7 @@ pub struct ProcState {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EngineState {
     pub beat: u64,
+    pub names: Vec<String>,
     pub progs: Vec<(usize, String)>,
     pub procs: HashMap<u64, ProcState>,
     pub sleeping: usize,
@@ -35,6 +37,7 @@ impl EngineState {
     pub fn new() -> Self {
         EngineState {
             beat: 0,
+            names: Vec::new(),
             progs: Vec::new(),
             procs: HashMap::new(),
             sleeping: 0,

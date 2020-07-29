@@ -416,6 +416,8 @@ impl Engine {
     pub fn state(&self) -> EngineState {
         let mut progs = Vec::new();
         let mut prog_map : HashMap<Rc<Prog>, usize> = HashMap::new();
+        let mut names = Vec::new();
+        let mut name_map : HashMap<Rc<str>, usize> = HashMap::new();
         let mut procs = HashMap:: new();
 
         for (pid, proc) in &self.procs {
@@ -428,9 +430,16 @@ impl Engine {
                 progs.push(top.memory.state_tuple(&self.charmap));
                 progs.len() - 1
             });
+            let name_index = proc.name.as_ref().map(|name| {
+                *name_map.entry(Rc::clone(name)).or_insert_with(|| {
+                    names.push(name.to_string());
+                    names.len() - 1
+                })
+            });
 
             let PC(pc) = top.pc;
-            procs.insert(*pid, ProcState { prog: *prog_index,
+            procs.insert(*pid, ProcState { name: name_index,
+                                           prog: *prog_index,
                                            pc: pc,
                                            active: proc.is_running(),
                                            output: proc.get_output() });
@@ -448,6 +457,7 @@ impl Engine {
         }
 
         EngineState { beat: self.beat,
+                      names: names,
                       progs: progs,
                       procs: procs,
                       sleeping: self.sleeping.len(),
