@@ -137,6 +137,9 @@ impl OpSet {
         ops.insert_safe(
             make_op!(103, "Get",
                      "Pop y and x. Push value from (y, x) onto stack.", get));
+        ops.insert_safe(
+            make_op!(59, "Drop",
+                     "Pop c and write it to the current position.", drop));
 
         ops.insert_safe(
             make_op!(90, "Play", "Play note in note buffer.", play));
@@ -450,6 +453,13 @@ fn swap(proc: &mut Process) {
     let d = pop!(proc);
     proc.push(c);
     proc.push(d);
+}
+
+fn drop(proc: &mut Process) {
+    let c = pop!(proc);
+
+    let top = proc.top_mut().unwrap();
+    Rc::make_mut(&mut top.memory).update(top.pc, c);
 }
 
 fn put(proc: &mut Process) {
