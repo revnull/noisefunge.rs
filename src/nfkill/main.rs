@@ -5,16 +5,22 @@ use reqwest::blocking::Client;
 use std::time::Duration;
 use serde_json;
 
-fn read_args() -> (Vec<u64>, String) {
+fn read_args() -> (KillReq, String) {
     let matches = App::new("nfkill")
-                          .arg(Arg::with_name("PID")
-                               .help("PID of process to kill, in hex.")
+                          .arg(Arg::with_name("PID_OR_NAME")
+                               .help("PID OR NAME of process to kill, in hex.")
                                .multiple(true)
                                .required_unless("ALL"))
                           .arg(Arg::with_name("ALL")
                                .short("a")
                                .long("--all")
-                               .conflicts_with("PID")
+                               .conflicts_with("PID_OR_NAME")
+                               .takes_value(false)
+                               .required(false))
+                          .arg(Arg::with_name("NAME")
+                               .short("n")
+                               .long("--name")
+                               .conflicts_with("ALL")
                                .takes_value(false)
                                .required(false))
                           .arg(Arg::with_name("HOST")
@@ -37,28 +43,36 @@ fn read_args() -> (Vec<u64>, String) {
                                            matches.value_of("PORT").unwrap());
 
     if matches.is_present("ALL") {
-        return (Vec::new(), baseuri)
+        return (KillReq::All, baseuri)
+    }
+
+    if matches.is_present("NAME") {
+        let mut names = Vec::new();
+        for name in matches.values_of("PID_OR_NAME").unwrap() {
+            names.push(name.to_string());
+        }
+        return (KillReq::Names(names), baseuri);
     }
 
     let mut pids = Vec::new();
-    for pid in matches.values_of("PID").unwrap() {
+    for pid in matches.values_of("PID_OR_NAME").unwrap() {
         let parsed = u64::from_str_radix(pid, 16).expect(
             &format!("Failed to parse pid {}", pid));
         pids.push(parsed);
     }
 
-    return (pids, baseuri)
+    return (KillReq::Pids(pids), baseuri)
 }
 
 fn main() {
 
-    let (pids, baseuri) = read_args();
+    let (req, baseuri) = read_args();
 
     let client = Client::builder().user_agent("nfkill")
                                   .build()
                                   .expect("Failed to build client.");
 
-    let body = serde_json::to_string(&KillReq::Pids(pids)).unwrap();
+    let body = serde_json::to_string(&req).unwrap();
     let path = format!("{}kill", baseuri);
     let request = client.post(&path)
                         .body(body)
