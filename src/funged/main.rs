@@ -61,13 +61,7 @@ impl FungedServer {
                     self.waiting.push((prev, rspndr));
                 }
             },
-            Kill(pids) => {
-                if pids.len() == 0 {
-                    self.engine.kill_all()
-                } else {
-                    for p in pids { self.engine.kill(p) }
-                }
-            },
+            Kill(killreq) => { self.engine.kill(killreq) },
         };
     }
 

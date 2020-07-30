@@ -5,7 +5,7 @@ mod charmap;
 pub use self::process::*;
 pub use self::ops::*;
 pub use self::charmap::*;
-use crate::api::{EngineState, ProcState};
+use crate::api::{EngineState, ProcState, KillReq};
 
 use arr_macro::arr;
 use std::collections::{BTreeMap, HashSet, HashMap, VecDeque};
@@ -93,12 +93,11 @@ pub struct Engine {
     next_pid: u64,
     progs: HashSet<Rc<Prog>>,
     procs: BTreeMap<u64,Process>,
-    process_names: HashSet<Rc<str>>,
+    process_names: HashMap<Rc<str>, HashSet<u64>>,
     buffers: [MessageQueue; 256],
     active: Vec<u64>,
     sleeping: Vec<(u64, u32)>,
-    all_killed: bool,
-    killed: HashSet<u64>,
+    kill_requests: Vec<KillReq>,
     ops: OpSet,
     charmap: CharMap,
     crash_log: Vec<(u64, CrashReason)>
@@ -122,12 +121,11 @@ impl Engine {
                  next_pid: 1,
                  progs: HashSet::new(),
                  procs: BTreeMap::new(),
-                 process_names: HashSet::new(),
+                 process_names: HashMap::new(),
                  buffers: arr![MessageQueue::Empty; 256],
                  active: Vec::new(),
                  sleeping: Vec::new(),
-                 all_killed: false,
-                 killed: HashSet::new(),
+                 kill_requests: Vec::new(),
                  ops: OpSet::default(),
                  charmap: CharMap::default(),
                  crash_log: Vec::new() }
@@ -139,12 +137,8 @@ impl Engine {
         pid
     }
 
-    pub fn kill(&mut self, pid: u64) {
-        self.killed.insert(pid);
-    }
-
-    pub fn kill_all(&mut self) {
-        self.all_killed = true
+    pub fn kill(&mut self, req: KillReq) {
+        self.kill_requests.push(req);
     }
 
     pub fn make_process(&mut self, name: Option<String>, prog: Prog) -> u64 {
@@ -161,13 +155,10 @@ impl Engine {
 
         let name = name.map(|n| {
             let rcname = Rc::from(n);
-            match self.process_names.get(&rcname) {
-                Some(n) => Rc::clone(n),
-                None => {
-                    self.process_names.insert(Rc::clone(&rcname));
-                    rcname
-                }
-            }
+            let entry = self.process_names.entry(rcname);
+            let ret = Rc::clone(entry.key());
+            entry.or_insert_with(|| HashSet::new()).insert(pid);
+            ret
         });
 
         let proc = Process::new(pid, name, prog);
@@ -181,13 +172,33 @@ impl Engine {
         let mut log = Vec::new();
         let sleeping = mem::take(&mut self.sleeping);
         let mut active = mem::take(&mut self.active);
-        let all_killed = self.all_killed;
-        self.all_killed = false;
+        let mut kill_reqs = mem::take(&mut self.kill_requests);
         let mut dead = Vec::new();
-        let killed = mem::take(&mut self.killed);
         let oldbeat = self.beat;
         self.beat += 1;
         self.crash_log = Vec::new();
+
+        let mut all_killed = false;
+        let mut killed = HashSet::new();
+
+        for kreq in kill_reqs.drain(..) {
+            match kreq {
+                KillReq::All => { all_killed = true; break },
+                KillReq::Pids(pids) => {
+                    for p in pids {
+                        killed.insert(p);
+                    }
+                },
+                KillReq::Names(names) => {
+                    for n in names {
+                        let rcn = Rc::from(n);
+                        if let Some(set) = self.process_names.remove(&rcn) {
+                            killed.extend(set);
+                        }
+                    }
+                }
+            }
+        }
 
         if all_killed {
             for pid in self.procs.keys() {
@@ -197,6 +208,7 @@ impl Engine {
             for i in 0..255 {
                 self.buffers[i].reset();
             }
+            self.process_names = HashMap::new();
             return (oldbeat, log)
         }
 
@@ -287,6 +299,14 @@ impl Engine {
                         p2.resume(Some(1));
                         next_active.push(proc.pid);
                         next_active.push(p2.pid);
+                        let p2pid = p2.pid;
+                        match &p2.name {
+                            None => {},
+                            Some(n) => {
+                                self.process_names.entry(Rc::clone(n))
+                                    .or_insert_with(|| HashSet::new()).insert(p2pid);
+                            }
+                        }
                         log.push(EventLog::NewProcess(p2.pid));
                         self.procs.insert(p2.pid, p2);
                     },
@@ -407,7 +427,18 @@ impl Engine {
         }
 
         for pid in dead {
-            self.procs.remove(&pid);
+            let proc = match self.procs.remove(&pid) {
+                None => continue,
+                Some(proc) => proc,
+            };
+            proc.name.map(|name| {
+                if let Some(mut set) = self.process_names.remove(&name) {
+                    set.remove(&pid);
+                    if !set.is_empty() {
+                        self.process_names.insert(Rc::clone(&name), set);
+                    }
+                }
+            });
         }
 
         (oldbeat, log)

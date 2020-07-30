@@ -58,7 +58,7 @@ fn main() {
                                   .build()
                                   .expect("Failed to build client.");
 
-    let body = serde_json::to_string(&KillReq{ pids: pids }).unwrap();
+    let body = serde_json::to_string(&KillReq::Pids(pids)).unwrap();
     let path = format!("{}kill", baseuri);
     let request = client.post(&path)
                         .body(body)

@@ -48,9 +48,13 @@ impl EngineState {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct KillReq {
-    pub pids: Vec<u64>
+pub enum KillReq {
+    Pids(Vec<u64>),
+    Names(Vec<String>),
+    All
 }
+
+unsafe impl Send for KillReq {}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KillResp { }

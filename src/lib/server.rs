@@ -43,7 +43,7 @@ impl<T> Responder<T> {
 pub enum FungeRequest {
     StartProcess(Option<String>, String, Responder<Result<u64,String>>),
     GetState(Option<u64>, Responder<Option<Arc<Vec<u8>>>>),
-    Kill(Vec<u64>)
+    Kill(KillReq)
 }
 
 unsafe impl Send for FungeRequest {}
@@ -54,9 +54,9 @@ pub struct ServerHandle {
 }
 
 fn kill(sender: &Sender<FungeRequest>, request: &Request) -> Response {
-    let data : KillReq = try_or_400!(rouille::input::json_input(&request));
+    let killreq : KillReq = try_or_400!(rouille::input::json_input(&request));
     
-    sender.send(FungeRequest::Kill(data.pids))
+    sender.send(FungeRequest::Kill(killreq))
           .expect("Sender::send failed");
 
     Response::json(&KillResp { })
