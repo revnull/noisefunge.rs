@@ -1,4 +1,6 @@
 
+use log::*;
+use simplelog::SimpleLogger;
 use noisefunge::jack::*;
 use noisefunge::server::*;
 use noisefunge::server::FungeRequest::*;
@@ -45,8 +47,8 @@ impl FungedServer {
                 Err(e) => panic!("Failed to parse preload file: {} - {:?}",
                                  filename, e),
             };
-            println!("Preloading: {}", filename);
-            engine.make_process(Some(filename.clone()), prog);
+            info!("Preloaded: {} - {}", filename,
+                  engine.make_process(Some(filename.clone()), prog));
         }
 
         FungedServer {
@@ -96,9 +98,11 @@ impl FungedServer {
 }
 
 fn main() {
+    let config = FungedConfig::read_config(&read_args());
+    SimpleLogger::init(config.log_level, simplelog::Config::default())
+        .expect("Failed to initialize logger");
 
-    let mut server = FungedServer::new(
-        FungedConfig::read_config(&read_args()));
+    let mut server = FungedServer::new(config);
 
     let handle = JackHandle::new(&server.config);
     let mut prev_missed = 0;
@@ -120,7 +124,7 @@ fn main() {
                 prev_i = i;
                 let missed = handle.missed();
                 if missed != prev_missed {
-                    eprintln!("Missed {} beats", missed - prev_missed); 
+                    error!("Missed {} beats", missed - prev_missed); 
                     prev_missed = missed;
                 }
             },

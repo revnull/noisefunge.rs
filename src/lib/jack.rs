@@ -2,6 +2,7 @@
 use arr_macro::arr;
 
 use jack::*;
+use log::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -180,15 +181,15 @@ impl JackHandle {
         for (src, dst) in &conf.connections {
             let src_name = &locals2.get(src).unwrap().name().unwrap();
             for name in client.ports(Some(dst), None, PortFlags::IS_INPUT) {
-                println!("{} -> {}: {:?}", src_name, name,
+                info!("Connecting: {} -> {}: {:?}", src_name, name,
                          client.connect_ports_by_name(src_name, &name));
             }
         }
 
         for name in client.ports(Some(&conf.beat_source), None,
                                  PortFlags::IS_OUTPUT) {
-            println!("{} -> {}: {:?}", &name, bi_name,
-                     client.connect_ports_by_name(&name, bi_name));
+            info!("Connecting: {} -> {}: {:?}", &name, bi_name,
+                  client.connect_ports_by_name(&name, bi_name));
         }
 
         let deact = Box::new(|| { active.deactivate().unwrap(); });

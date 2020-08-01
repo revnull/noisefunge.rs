@@ -3,6 +3,8 @@ use arr_macro::arr;
 use config::{Config, ConfigError, File, Value};
 use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
+use std::str::FromStr;
+use log::*;
 
 pub struct ChannelConfig {
     pub local: Rc<str>,
@@ -21,6 +23,7 @@ pub struct FungedConfig {
     pub connections: Vec<(Rc<str>, String)>,
     pub channels: [Option<ChannelConfig>; 256],
     pub preload: Vec<String>,
+    pub log_level: LevelFilter
 }
 
 fn get_connections(local: &Rc<str>, table: &HashMap<String, Value>)
@@ -81,6 +84,7 @@ impl FungedConfig {
         settings.set_default("host", "127.0.0.1").unwrap();
         settings.set_default("port", 1312).unwrap();
         settings.set_default("period", 24).unwrap();
+        settings.set_default("log_level", "INFO").unwrap();
 
         settings.merge(File::with_name(&file)).unwrap();
         let host = settings.get_str("host").unwrap();
@@ -118,7 +122,7 @@ impl FungedConfig {
                                             note_filter: None });
                     }
                 }
-                _ => { eprintln!("No starting channel for {}", &local); }
+                _ => { error!("No starting channel for {}", &local); }
             };
             locals.insert(local);
         }
@@ -142,6 +146,13 @@ impl FungedConfig {
 
         let preload = get_preload(&settings);
 
+        let log_level = settings.get_str("log_level")
+                                .expect("Invalid log level");
+        let log_level = match LevelFilter::from_str(&log_level) {
+            Ok(level) => level,
+            Err(e) => panic!("Bad log_level: {:?}", e),
+        };
+
         FungedConfig { host: host,
                        port: port,
                        beat_source: Rc::from(bi),
@@ -149,6 +160,7 @@ impl FungedConfig {
                        locals: locals,
                        connections: connections,
                        channels: channels,
-                       preload: preload }
+                       preload: preload,
+                       log_level: log_level }
     }
 }

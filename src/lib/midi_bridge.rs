@@ -1,5 +1,6 @@
 
 use arr_macro::arr;
+use log::*;
 use rand::Rng;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem;
@@ -544,7 +545,7 @@ impl<'a> MidiBridge<'a> {
             panic!("Beat went back in time!!!");
         }
         if beat - self.beat > 1 {
-            eprintln!("Warning! Stepped {} beats", beat - self.beat);
+            error!("Warning! Stepped {} beats", beat - self.beat);
             let empty = Vec::new();
             for i in self.beat..beat {
                 self.step_i(i, &empty);

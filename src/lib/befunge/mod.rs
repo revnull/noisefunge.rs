@@ -503,6 +503,7 @@ impl Engine {
 mod tests {
     use super::*;
     use std::iter::FromIterator;
+    use log::*;
 
     fn expect_ordered(eng: &mut Engine, expect: Vec<EventLog>,
                       max_steps: u16) -> u64 {
@@ -513,7 +514,7 @@ mod tests {
                 match expect.front() {
                     None => break,
                     Some(ex) if *ex == l => { expect.pop_front(); },
-                    Some(_) => { println!("Unmatched event: {:?}", l); }
+                    Some(_) => { error!("Unmatched event: {:?}", l); }
                 }
             }
             if expect.is_empty() { return beat }
@@ -531,7 +532,7 @@ mod tests {
             let (beat, log) = eng.step();
             for l in log {
                 if !expect.remove(&l) {
-                    println!("Unexpected event: {:?}", l);
+                    error!("Unexpected event: {:?}", l);
                 }
             }
             if expect.is_empty() { return beat }
