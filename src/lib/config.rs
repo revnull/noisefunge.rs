@@ -1,5 +1,6 @@
 
 use arr_macro::arr;
+use config::{Config, ConfigError, File, Value};
 use std::collections::{HashSet, HashMap};
 use std::rc::Rc;
 
@@ -19,9 +20,10 @@ pub struct FungedConfig {
     pub locals: HashSet<Rc<str>>,
     pub connections: Vec<(Rc<str>, String)>,
     pub channels: [Option<ChannelConfig>; 256],
+    pub preload: Vec<String>,
 }
 
-fn get_connections(local: &Rc<str>, table: &HashMap<String, config::Value>)
+fn get_connections(local: &Rc<str>, table: &HashMap<String, Value>)
                   -> Vec<(Rc<str>,String)> {
     let mut result = Vec::new();
 
@@ -51,15 +53,36 @@ fn get_connections(local: &Rc<str>, table: &HashMap<String, config::Value>)
     result
 }
 
+fn get_preload(settings: &Config) -> Vec<String> {
+
+    match settings.get_str("preload") {
+        Ok(val) => return vec![val],
+        Err(ConfigError::NotFound(_)) => return Vec::new(),
+        _ => {}
+    }
+
+    let vals = match settings.get_array("preload") {
+        Ok(vals) =>  { vals }
+        Err(e) => panic!("Bad preload: {:?}", e),
+    };
+
+    vals.into_iter().map(|v| {
+        match v.into_str() {
+            Ok(s) => s,
+            Err(e) => panic!("Bad preload: {:?}", e)
+        }
+    }).collect()
+}
+
 impl FungedConfig {
     pub fn read_config(file: &str) -> FungedConfig {
-        let mut settings = config::Config::default();
+        let mut settings = Config::default();
 
         settings.set_default("host", "127.0.0.1").unwrap();
         settings.set_default("port", 1312).unwrap();
         settings.set_default("period", 24).unwrap();
 
-        settings.merge(config::File::with_name(&file)).unwrap();
+        settings.merge(File::with_name(&file)).unwrap();
         let host = settings.get_str("host").unwrap();
         let port = settings.get_int("port").expect("Port not set") as u16;
         let bi = settings.get_str("beats_in").expect("Beats in not found.");
@@ -117,12 +140,15 @@ impl FungedConfig {
                                     .map(|f| ch.note_filter = Some(f));
         }
 
+        let preload = get_preload(&settings);
+
         FungedConfig { host: host,
                        port: port,
                        beat_source: Rc::from(bi),
                        period: period as u64,
                        locals: locals,
                        connections: connections,
-                       channels: channels }
+                       channels: channels,
+                       preload: preload }
     }
 }

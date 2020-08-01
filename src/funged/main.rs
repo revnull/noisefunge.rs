@@ -6,6 +6,7 @@ use noisefunge::befunge::*;
 use noisefunge::config::*;
 use noisefunge::api::*;
 use noisefunge::midi_bridge::*;
+use std::fs;
 use std::sync::{Arc};
 use crossbeam_channel::select;
 use serde_json::{to_vec};
@@ -32,9 +33,22 @@ struct FungedServer {
 impl FungedServer {
 
     fn new(conf: FungedConfig) -> Self {
-        let engine = Engine::new(conf.period);
+        let mut engine = Engine::new(conf.period);
         let state = engine.state();
         let state_vec = Arc::new(to_vec(&state).unwrap());
+
+        for filename in &conf.preload {
+            let prog = fs::read_to_string(filename).expect(
+                &format!("Failed to open preload file: {}", filename));
+            let prog = match Prog::parse(&prog) {
+                Ok(p) => p,
+                Err(e) => panic!("Failed to parse preload file: {} - {:?}",
+                                 filename, e),
+            };
+            println!("Preloading: {}", filename);
+            engine.make_process(Some(filename.clone()), prog);
+        }
+
         FungedServer {
             config: conf,
             engine: engine,
