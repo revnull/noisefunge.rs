@@ -1,7 +1,9 @@
 
 use rouille::{Request, Response, router, try_or_400};
+use log::*;
 use std::thread;
 use std::sync::{Arc, Mutex, Condvar};
+use std::time::Duration;
 use crossbeam_channel::{bounded, Sender, Receiver};
 
 use crate::config::{FungedConfig};
@@ -16,17 +18,21 @@ impl<T> Responder<T> {
         Responder(Arc::new((Mutex::new(None), Condvar::new())))
     }
 
-    fn wait(&self) -> T {
+    fn wait(&self) -> Option<T> {
         let Responder(arc) = self;
         let lock = &arc.0;
         let cond = &arc.1;
 
-        let mut val = lock.lock().unwrap();
-        while val.is_none() {
-            val = cond.wait(val).unwrap();
-        }
+        let (mut val, timeout) = cond.wait_timeout_while(
+            lock.lock().unwrap(),
+            Duration::from_secs(30),
+            |value| value.is_none()).unwrap();
 
-        val.take().unwrap()
+        if timeout.timed_out() {
+            debug!("Timed out waiting for responder.");
+            return None
+        }
+        val.take()
     }
 
     pub fn respond(&self,t: T) {
@@ -70,7 +76,12 @@ fn new_process(sender: &Sender<FungeRequest>, request: &Request) -> Response {
                                            responder.clone()))
           .expect("Sender::send failed");
 
-    Response::json(&NewProcessResp { pid: responder.wait().unwrap() })
+    match responder.wait() {
+        None => Response::text("Server timed out.").with_status_code(503),
+        Some(Ok(resp)) => Response::json(&NewProcessResp { pid: resp }),
+        Some(Err(e)) => Response::text(format!("Bad Program: {}", e))
+            .with_status_code(400),
+    }
 }
 
 fn get_state(sender: &Sender<FungeRequest>, request: &Request) -> Response {
@@ -82,9 +93,11 @@ fn get_state(sender: &Sender<FungeRequest>, request: &Request) -> Response {
           .expect("Sender::send failed");
 
     match responder.wait() {
-        Some(bytes) => Response::from_data("application/json; charset=utf-8",
-                                           (*bytes).clone()),
-        None => Response::empty_400()
+        Some(Some(bytes)) =>
+            Response::from_data("application/json; charset=utf-8",
+                               (*bytes).clone()),
+        Some(None) => Response::empty_400(),
+        None => Response::text("Server timed out.").with_status_code(503),
     }
 }
 
