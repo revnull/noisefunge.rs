@@ -473,7 +473,10 @@ impl Engine {
                                            prog: *prog_index,
                                            pc: pc,
                                            active: proc.is_running(),
-                                           output: proc.get_output() });
+                                           output: proc.get_output(),
+                                           data_stack: proc.data_stack_size(),
+                                           call_stack: proc.call_stack_size(),
+                                         });
         }
 
         let mut buffers = BTreeMap::new();

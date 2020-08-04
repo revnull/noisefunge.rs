@@ -21,6 +21,10 @@ name = "nfbuffer"
 path = "src/nfbuffer/main.rs"
 
 [[bin]]
+name = "nftop"
+path = "src/nftop/main.rs"
+
+[[bin]]
 name = "nfloader"
 path = "src/nfloader/main.rs"
 

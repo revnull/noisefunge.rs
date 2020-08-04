@@ -342,6 +342,14 @@ impl Process {
     pub fn get_output(&self) -> Option<String> {
         self.output.clone()
     }
+
+    pub fn data_stack_size(&self) -> usize {
+        self.data_stack.len()
+    }
+
+    pub fn call_stack_size(&self) -> usize {
+        self.call_stack.len()
+    }
 }
 
 #[derive(Clone)]

@@ -19,7 +19,9 @@ pub struct ProcState {
     pub prog: usize,
     pub pc: usize,
     pub active: bool,
-    pub output: Option<String>
+    pub output: Option<String>,
+    pub data_stack: usize,
+    pub call_stack: usize
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
