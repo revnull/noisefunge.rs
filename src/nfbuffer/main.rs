@@ -42,7 +42,7 @@ fn start_request_thread(baseuri: &str) -> Handle {
         let cond = &arc.1;
         let mut prev = 0;
         let mut delay = false;
-        let client = Client::builder().user_agent("nfviewer")
+        let client = Client::builder().user_agent("nfbuffer")
                                       .build()
                                       .expect("Failed to build client");
         loop {
