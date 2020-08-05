@@ -2,6 +2,11 @@
 use crate::befunge::CrashReason;
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, Condvar};
+use std::thread;
+use std::time::Duration;
+
+use reqwest::blocking::Client;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,3 +66,83 @@ unsafe impl Send for KillReq {}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KillResp { }
 
+
+pub struct FungeClient(
+    Arc<(Mutex<Option<Result<EngineState, String>>>, Condvar)>);
+
+impl FungeClient {
+    pub fn new(baseuri: &str) -> Self {
+        let mtx = Mutex::new(None);
+        let cond = Condvar::new();
+        let arc = Arc::new((mtx, cond));
+        let arc2 = Arc::clone(&arc);
+        let basereq = format!("{}state", baseuri);
+
+        thread::spawn(move || {
+            let lock = &arc.0;
+            let cond = &arc.1;
+            let mut prev = 0;
+            let mut delay = false;
+            let client = Client::builder().user_agent("nfbuffer")
+                                          .build()
+                                          .expect("Failed to build client");
+            loop {
+                if delay {
+                    delay = false;
+                    thread::sleep(Duration::from_secs(1));
+                };
+
+                let request = client.get(&basereq)
+                                    .query(&[("prev", prev.to_string())])
+                                    .timeout(Duration::from_secs(4))
+                                    .build()
+                                    .expect("Failed to build client");
+                let response = client.execute(request);
+                let msg = match response {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            response.json().map_err(|e|
+                                format!("Serialization error: {:?}", e))
+                                .map(|s: EngineState| { prev = s.beat; s })
+                        } else {
+                            delay = true;
+                            prev = 0;
+                            Err(format!("Bad status code: {:?}",
+                                        response.status()))
+                        }
+                    }
+                    Err(e) => {
+                        delay = true;
+                        Err(format!("HTTP request failed: {:?}", e))
+                    }
+                };
+                let mut val = lock.lock().unwrap();
+                while val.is_some() {
+                    val = cond.wait(val).unwrap();
+                };
+                *val = Some(msg);
+                cond.notify_one();
+            }
+        });
+
+        FungeClient(arc2)
+    }
+
+    pub fn get_state(&self, sleep_dur: Duration)
+        -> Option<Result<EngineState,String>> {
+
+        let lock = &(self.0).0;
+        let cond = &(self.0).1;
+
+        let (mut val, timeout) = cond.wait_timeout_while(
+                lock.lock().unwrap(),
+                sleep_dur,
+                |value| value.is_none()).unwrap();
+
+        if timeout.timed_out() { return None }
+
+        cond.notify_one();
+        val.take()
+    }
+
+}
