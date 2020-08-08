@@ -4,7 +4,7 @@ use clap::{Arg, App};
 use std::mem;
 use pancurses::{initscr, cbreak, noecho, endwin, Input, has_colors,
                 start_color, init_pair, curs_set, Window};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::cmp;
 use std::rc::Rc;
 use std::time::Duration;
@@ -27,16 +27,251 @@ fn read_args() -> String {
                              matches.value_of("PORT").unwrap())
 }
 
-struct Tile {
-    width: usize,
+struct View {
     pid: u64,
     last_pc: Option<(Rc<str>,usize)>,
     buffer: String
 }
 
+impl View {
+    fn new(pid: u64) -> Self {
+        View { pid: pid,
+               last_pc: None,
+               buffer: String::new() }
+    }
+}
+
+struct Tile {
+    xpos: i32,
+    ypos: i32,
+    width: i32,
+    height: i32,
+    view: Option<View>
+}
+
+impl Tile {
+    fn new(x: i32, y: i32, width: i32, height: i32,
+           view: Option<View>) -> Self {
+        Tile { xpos: x,
+               ypos: y,
+               width: width,
+               height: height,
+               view: view }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.view.is_none()
+    }
+
+    fn draw(&mut self, win: &Window, unused: &mut Vec<u64>, tiler: &mut Tiler,
+            allow_split: bool, allow_retry: bool) -> Option<Tile> {
+        
+        if self.is_empty() {
+            if ! allow_retry { return None }
+            let pid = match unused.pop() {
+                None => return None,
+                Some(p) => p
+            };
+            self.view = Some(View::new(pid));
+            return self.draw(win, unused, tiler, true, false);
+        }
+        let mut view = self.view.take().unwrap();
+        let pid = view.pid;
+
+        let proc = match tiler.state.procs.get(&pid) {
+            None => {
+                return self.draw(win, unused, tiler, true, true);
+            }
+            Some(p) => p,
+        };
+
+        let (width, height, text) = &tiler.progs[proc.prog];
+        let width = *width;
+        let height = *height;
+        let display_height = height as i32 + 3;
+        let display_width = width as i32 + 1;
+
+        if display_width > self.width || display_height > self.height {
+            // self.view is currently None. Try to draw new proc.
+            return self.draw(win, unused, tiler, true, allow_retry);
+        }
+
+        tiler.active.insert(pid);
+        let (last_pc, is_new) = match view.last_pc.take() {
+            Some((txt, p)) => {
+                if Rc::ptr_eq(&txt, text) {
+                    (Some(p), false)
+                } else {
+                    (None, false)
+                }
+            },
+            None => (None, true)
+        };
+
+        let mut x = self.xpos;
+        let mut y = self.ypos;
+        for (i, ch) in text.chars().enumerate() {
+            let s = ch.to_string();
+
+            if i % width == 0 {
+                win.mv(y, x);
+                y += 1;
+            }
+            if i == proc.pc {
+                if proc.active {
+                    win.color_set(3);
+                } else {
+                    win.color_set(5);
+                }
+                win.addstr(s);
+                win.color_set(0);
+            } else if Some(i) == last_pc {
+                win.color_set(4);
+                win.addstr(s);
+                win.color_set(0);
+            } else {
+                win.addstr(s);
+            }
+        }
+
+        let pid_str = format!("{:X}", pid);
+        let max_buf = self.width as usize - pid_str.len() - 1;
+        if let Some(s) = &proc.output {
+            view.buffer.push_str(s);
+            let buf_len = view.buffer.chars().count();
+            if buf_len > max_buf {
+                view.buffer = view.buffer.chars()
+                                         .skip(buf_len - max_buf)
+                                         .collect();
+            }
+        }
+
+        if is_new {
+            win.color_set(3);
+        } else {
+            win.color_set(6);
+        }
+        win.mvaddstr(self.ypos + self.height as i32 - 3, self.xpos, &pid_str);
+        if let Some(i) = proc.name {
+            win.mvaddnstr(self.ypos + self.height as i32 - 2, self.xpos,
+                          &tiler.state.names[i], (self.width - 1) as i32);
+        }
+        win.color_set(2);
+        win.mvaddstr(self.ypos + self.height as i32 - 3,
+                     self.xpos + pid_str.len() as i32, &view.buffer);
+        win.color_set(0);
+
+        view.last_pc = Some((Rc::clone(text), proc.pc));
+        self.view = Some(view);
+
+        if allow_split && display_width < self.width {
+            let new = Tile::new(self.xpos + display_width, self.ypos,
+                                self.width - display_width, self.height, None);
+            self.width = display_width;
+            return Some(new);
+
+        }
+
+        return None;
+    }
+
+}
+
 struct TileRow {
-    height: usize,
+    xpos: i32,
+    ypos: i32,
+    width: i32,
+    height: i32,
     tiles: Vec<Tile>
+}
+
+impl TileRow {
+    fn new(x: i32, y: i32, width: i32, height: i32) -> TileRow {
+        TileRow { xpos: x,
+                  ypos: y,
+                  width: width,
+                  height: height,
+                  tiles: Vec::new() }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.tiles.is_empty()
+    }
+
+    fn draw(&mut self, win: &Window, unused: &mut Vec<u64>,
+            tiler: &mut Tiler) {
+
+        let mut x = self.xpos;
+        let mut tiles = mem::take(&mut self.tiles);
+        let mut prev_empty = false;
+
+        for mut t in tiles.drain(..) {
+            if t.xpos != x || t.ypos != self.ypos {
+                panic!("x: {} vs {} - y: {} vs {}", t.xpos, self.xpos,
+                       t.ypos, self.ypos);
+            }
+            match t.draw(win, unused, tiler, false, true) {
+                None => {
+                    x += t.width;
+                    if t.is_empty() && prev_empty {
+                        match self.tiles.last_mut() {
+                            None => panic!("No last tile."),
+                            Some(prev) => prev.width += t.width,
+                        }
+                    } else {
+                        self.tiles.push(t);
+                    }
+                },
+                Some(empty) => {
+                    x += t.width + empty.width;
+                    self.tiles.push(t);
+                    self.tiles.push(empty);
+                },
+            }
+
+            prev_empty = self.tiles.last().map(|t| t.is_empty())
+                                          .unwrap_or(false);
+        }
+
+        // Pop any empty ones off of the end.
+        while self.tiles.last().map(|t| t.is_empty()).unwrap_or(false) {
+            let t = self.tiles.pop().unwrap();
+            x = t.xpos;
+        }
+
+        let mut attempts = 5;
+        while x < (self.xpos + self.width) && attempts > 0 {
+            let pid = match unused.last() {
+                None => break,
+                Some(pid) => pid,
+            };
+            let proc = match tiler.state.procs.get(&pid) {
+                None => {
+                    attempts -= 1;
+                    unused.pop();
+                    continue;
+                },
+                Some(proc) => proc,
+            };
+            let (width, height, text) = &tiler.progs[proc.prog];
+            let width = *width;
+            let height = *height;
+            let display_width = width as i32 + 1;
+            let display_height = height as i32 + 3;
+            if display_height > self.height || x + display_width > self.width {
+                attempts -= 1;
+                unused.pop();
+                continue;
+            }
+            let mut tile = Tile::new(x, self.ypos, display_width,
+                                     self.height, None);
+            tile.draw(win, unused, tiler, false, false);
+            x += tile.width;
+            self.tiles.push(tile);
+        }
+
+    }
+
 }
 
 struct Tiler {
@@ -44,7 +279,7 @@ struct Tiler {
     state: EngineState,
     active: HashSet<u64>,
     prog_set: HashSet<Rc<str>>,
-    progs: Vec<(usize, Rc<str>)>,
+    progs: Vec<(usize, usize, Rc<str>)>, // width, height, body
     errors: String,
     needs_redraw: bool,
 }
@@ -85,111 +320,23 @@ impl Tiler {
                     rcprog
                 }
             };
-            self.progs.push((width, cloned));
+            let height = cloned.chars().count() / width;
+            self.progs.push((width, height, cloned));
         }
     }
 
-    fn try_draw_process(&self, window: &Window, x: usize, y: usize,
-                        min_width: usize, min_height: usize,
-                        max_width: usize, max_height: usize,
-                        pid: u64, last_tile: Option<&mut Tile>)
-                        -> Option<(usize, Tile)> {
-
-        let proc = match self.state.procs.get(&pid) {
-            Some(x) => x,
-            None => return None
-        };
-
-        let (width, text) = &self.progs[proc.prog];
-        let display_width = cmp::max(min_width, *width + 1);
-
-        let height = cmp::max(min_height, (text.chars().count() / width) + 2);
-
-        if display_width > max_width || height > max_height {
-            return None;
-        }
-
-        let (last_pc, mut buffer) = match last_tile {
-            Some(t) => {
-                let last_pc = match t.last_pc.as_ref() {
-                    Some((txt, p)) => {
-                        if Rc::ptr_eq(&txt, text) {
-                            Some(*p)
-                        } else {
-                            None
-                        }
-                    }
-                    None => None
-                };
-                (last_pc, mem::take(&mut t.buffer))
-            },
-            None => (None, String::new())
-        };
-
-        let mut dy = 0;
-        for (i, ch) in text.chars().enumerate() {
-            let mut s = String::new();
-            s.push(ch);
-            if i % width == 0 {
-                window.mv(dy + y as i32,x as i32);
-                dy += 1;
-            }
-            if !proc.active && i == proc.pc {
-                window.color_set(5);
-                window.addstr(s);
-                window.color_set(0);
-            } else if Some(i) == last_pc {
-                window.color_set(4);
-                window.addstr(s);
-                window.color_set(0);
-            } else if i == proc.pc {
-                window.color_set(3);
-                window.addstr(s);
-                window.color_set(0);
-            } else {
-                window.addstr(s);
-            }
-        }
-
-        let pid_str = format!("{:X}", pid);
-        let max_buf = display_width - pid_str.len() - 1;
-        if let Some(s) = &proc.output {
-            buffer.push_str(s);
-            let buf_len = buffer.chars().count();
-            if buf_len > max_buf {
-                buffer = buffer.chars().skip(buf_len - max_buf).collect()
-            }
-        }
-
-        window.color_set(6);
-        window.mvaddstr((y + height - 3) as i32, x as i32, &pid_str);
-        if let Some(i) = proc.name {
-            window.mvaddnstr((y + height - 2) as i32, x as i32,
-                             &self.state.names[i], (display_width - 1) as i32);
-        }
-        window.color_set(2);
-        window.mvaddstr((y + height - 3) as i32, (x + pid_str.len()) as i32,
-                        &buffer);
-        window.color_set(0);
-
-        Some((height, Tile { width: display_width,
-                             pid: pid,
-                             last_pc: Some((Rc::clone(text), proc.pc)),
-                             buffer: buffer }))
-    }
-
-    fn draw(&mut self, window: &Window) {
+    fn draw(&mut self, win: &Window) {
         if !self.needs_redraw {
             return;
         }
-
-        let (mut y, minx) = window.get_beg_yx();
-        let (maxy, maxx) = window.get_max_yx();
+        self.needs_redraw = false;
+        let (miny, minx) = win.get_beg_yx();
+        let (maxy, maxx) = win.get_max_yx();
 
         // Clear and print beat.
-        window.clear();
-        window.color_set(0);
-        window.mvaddstr(maxy - 1, 0, format!("{}", self.state.beat));
+        win.clear();
+        win.color_set(0);
+        win.mvaddstr(maxy - 1, 0, format!("{}", self.state.beat));
 
         // Error bar
         let elen = self.errors.len();
@@ -200,85 +347,57 @@ impl Tiler {
         } else if elen > maxx as usize {
             self.errors = String::from(&self.errors[elen-maxx as usize..elen]);
         }
-        window.mv(maxy - 2, 0);
-        window.color_set(1);
-        window.mvaddstr(maxy - 2, 0, self.errors.clone());
-        window.color_set(0);
+        win.mv(maxy - 2, 0);
+        win.color_set(1);
+        win.mvaddstr(maxy - 2, 0, self.errors.clone());
+        win.color_set(0);
+
+        let maxy = maxy - 3;
+        let mut y = miny;
 
         let active = mem::take(&mut self.active);
         let mut unused = self.state.procs.keys()
-                                         .filter(|k| !active.contains(k))
-                                         .take(20);
-        let mut rows = mem::take(&mut self.rows);
-        let mut old_rows = rows.iter_mut();
+                                         .filter(|p| !active.contains(p))
+                                         .take(50)
+                                         .cloned()
+                                         .collect();
 
-        let maxy = maxy - 2;
+        let mut old_rows = mem::take(&mut self.rows);
+        for mut row in old_rows.drain(..) {
+            row.draw(win, &mut unused, self);
+            y += row.height;
+            self.rows.push(row);
+        };
 
-        'outer: while y < maxy {
-            let mut x = minx;
-
-            if let Some(row) = old_rows.next() {
-                let mut new_tiles = Vec::new();
-                for tile in row.tiles.iter_mut() {
-                    if let Some((_height, t)) =
-                        self.try_draw_process(window, x as usize, y as usize,
-                                              tile.width, row.height,
-                                              tile.width, row.height,
-                                              tile.pid, Some(tile)) {
-                        x += t.width as i32;
-                        new_tiles.push(t);
-                        self.active.insert(tile.pid);
-                    }
-                }
-
-                'append: while x < maxx {
-                    if let Some((_height, t)) = unused.next()
-                        .and_then(|pid|
-                            self.try_draw_process(window, x as usize,
-                                                  y as usize,
-                                                  0, row.height,
-                                                  (maxx - x) as usize, 
-                                                  row.height, *pid,
-                                                  None)) {
-                        x += t.width as i32;
-                        self.active.insert(t.pid);
-                        new_tiles.push(t);
-                    } else {
-                        break 'append;
-                    }
-                }
-
-                if !new_tiles.is_empty() {
-                    self.rows.push(TileRow { height: row.height,
-                                             tiles: new_tiles });
-                    
-                    y += row.height as i32;
-                }
-                continue 'outer;
-            }
-            
-            if let Some(pid) = unused.next() {
-                if let Some((height, t)) =
-                    self.try_draw_process(window, x as usize, y as usize,
-                                          0, 0,
-                                          (maxx - x) as usize, 
-                                          (maxy - y) as usize, *pid,
-                                          None) {
-                    self.rows.push(TileRow { height: height,
-                                             tiles: vec![t] });
-                    self.active.insert(*pid);
-                    y += height as i32;
-                }
-
-                continue 'outer;
-            } else {
-                break 'outer;
-            }
-
+        while self.rows.last().map(|t| t.is_empty()).unwrap_or(false) {
+            let row = self.rows.pop().unwrap();
+            y -= row.height;
         }
 
-        window.refresh();
-        self.needs_redraw = false;
+        while y < maxy {
+            let pid = match unused.last() {
+                None => break,
+                Some(pid) => pid,
+            };
+            let proc = match self.state.procs.get(&pid) {
+                None => {
+                    unused.pop();
+                    continue;
+                },
+                Some(proc) => proc,
+            };
+            let (width, height, text) = &self.progs[proc.prog];
+            let display_height = *height as i32 + 3;
+            if y + display_height > maxy {
+                unused.pop();
+                continue;
+            }
+            let mut row = TileRow::new(minx, y, maxx - minx, display_height);
+            row.draw(win, &mut unused, self);
+            y += row.height;
+            self.rows.push(row);
+        }
+
     }
 
     fn retile(&mut self) {
