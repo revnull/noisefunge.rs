@@ -116,7 +116,9 @@ impl Tile {
                 y += 1;
             }
             if i == proc.pc {
-                if proc.active {
+                if proc.play.is_some() {
+                    win.color_set(7);
+                } else if proc.active {
                     win.color_set(3);
                 } else {
                     win.color_set(5);
@@ -428,6 +430,7 @@ fn main() {
         init_pair(4, pancurses::COLOR_BLACK, pancurses::COLOR_BLUE);
         init_pair(5, pancurses::COLOR_BLACK, pancurses::COLOR_YELLOW);
         init_pair(6, pancurses::COLOR_BLACK, pancurses::COLOR_MAGENTA);
+        init_pair(7, pancurses::COLOR_BLACK, pancurses::COLOR_GREEN);
     }
     window.nodelay(true);
 

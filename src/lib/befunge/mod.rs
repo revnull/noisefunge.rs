@@ -405,6 +405,7 @@ impl Engine {
                     },
                     ProcessState::Trap(Syscall::Play(note)) => {
                         log.push(EventLog::Play(*note));
+                        proc.set_play();
                         proc.resume(None);
                         next_active.push(proc.pid);
                     },
@@ -476,6 +477,7 @@ impl Engine {
                                            output: proc.get_output(),
                                            data_stack: proc.data_stack_size(),
                                            call_stack: proc.call_stack_size(),
+                                           play: proc.get_played_note(),
                                          });
         }
 

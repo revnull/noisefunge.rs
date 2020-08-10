@@ -1,5 +1,5 @@
 
-use crate::befunge::CrashReason;
+use crate::befunge::{CrashReason, Note};
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, Condvar};
@@ -26,7 +26,8 @@ pub struct ProcState {
     pub active: bool,
     pub output: Option<String>,
     pub data_stack: usize,
-    pub call_stack: usize
+    pub call_stack: usize,
+    pub play: Option<Note>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

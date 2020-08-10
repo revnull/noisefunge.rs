@@ -152,7 +152,8 @@ pub struct Process {
     call_stack: Vec<ProcessStack>,
     state: ProcessState,
     note: Note,
-    output: Option<String>
+    output: Option<String>,
+    play: bool
 }
 
 impl Process {
@@ -168,7 +169,8 @@ impl Process {
                   call_stack: stvec,
                   state: ProcessState::Running(false),
                   note: Note::default(),
-                  output: None }
+                  output: None,
+                  play: false }
     }
 
     pub fn is_running(&self) -> bool {
@@ -332,7 +334,8 @@ impl Process {
     }
 
     pub fn clear_output(&mut self) {
-        self.output = None
+        self.output = None;
+        self.play = false;
     }
 
     pub fn set_output(&mut self, v: String) {
@@ -341,6 +344,18 @@ impl Process {
 
     pub fn get_output(&self) -> Option<String> {
         self.output.clone()
+    }
+
+    pub fn set_play(&mut self) {
+        self.play = true;
+    }
+
+    pub fn get_played_note(&self) -> Option<Note> {
+        if self.play {
+            Some(self.note)
+        } else {
+            None
+        }
     }
 
     pub fn data_stack_size(&self) -> usize {
