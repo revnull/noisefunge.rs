@@ -4,8 +4,7 @@ use clap::{Arg, App};
 use std::mem;
 use pancurses::{initscr, cbreak, noecho, endwin, Input, has_colors,
                 start_color, init_pair, curs_set, Window};
-use std::collections::{HashSet, HashMap};
-use std::cmp;
+use std::collections::{HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -108,13 +107,12 @@ impl Tile {
             None => (None, true)
         };
 
-        let mut x = self.xpos;
         let mut y = self.ypos;
         for (i, ch) in text.chars().enumerate() {
             let s = ch.to_string();
 
             if i % width == 0 {
-                win.mv(y, x);
+                win.mv(y, self.xpos);
                 y += 1;
             }
             if i == proc.pc {
@@ -253,7 +251,7 @@ impl TileRow {
                 },
                 Some(proc) => proc,
             };
-            let (width, height, text) = &tiler.progs[proc.prog];
+            let (width, height, _text) = &tiler.progs[proc.prog];
             let width = *width;
             let height = *height;
             let display_width = width as i32 + 1;
@@ -386,7 +384,7 @@ impl Tiler {
                 },
                 Some(proc) => proc,
             };
-            let (width, height, text) = &self.progs[proc.prog];
+            let (_width, height, _text) = &self.progs[proc.prog];
             let display_height = *height as i32 + 3;
             if y + display_height > maxy {
                 unused.pop();

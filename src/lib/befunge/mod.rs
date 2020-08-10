@@ -660,4 +660,17 @@ mod tests {
             ], 10);
     }
 
+    #[test]
+    fn test_quantize() {
+        let mut eng = Engine::new(24);
+        eng.make_process(None, Prog::parse(">84Q&@").unwrap());
+        eng.make_process(None, Prog::parse(">9AQ&@").unwrap());
+
+        expect_ordered(&mut eng, vec![
+            EventLog::PrintNum(1, 8),
+            EventLog::PrintNum(2, 9),
+        ], 100);
+    }
+
+
 }
