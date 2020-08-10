@@ -133,7 +133,7 @@ impl Tile {
         }
 
         let pid_str = format!("{:X}", pid);
-        let max_buf = self.width as usize - pid_str.len() - 1;
+        let max_buf = self.width as usize - 1;
         if let Some(s) = &proc.output {
             view.buffer.push_str(s);
             let buf_len = view.buffer.chars().count();
@@ -155,8 +155,8 @@ impl Tile {
                           &tiler.state.names[i], (self.width - 1) as i32);
         }
         win.color_set(2);
-        win.mvaddstr(self.ypos + self.height as i32 - 3,
-                     self.xpos + pid_str.len() as i32, &view.buffer);
+        win.mvaddstr(self.ypos + self.height as i32 - 4,
+                     self.xpos, &view.buffer);
         win.color_set(0);
 
         view.last_pc = Some((Rc::clone(text), proc.pc));
