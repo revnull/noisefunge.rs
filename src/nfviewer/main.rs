@@ -116,9 +116,7 @@ impl Tile {
                 y += 1;
             }
             if i == proc.pc {
-                if proc.play.is_some() {
-                    win.color_set(7);
-                } else if proc.active {
+                if proc.active {
                     win.color_set(3);
                 } else {
                     win.color_set(5);
@@ -126,7 +124,11 @@ impl Tile {
                 win.addstr(s);
                 win.color_set(0);
             } else if Some(i) == last_pc {
-                win.color_set(4);
+                if proc.play.is_some() {
+                    win.color_set(7);
+                } else {
+                    win.color_set(4);
+                }
                 win.addstr(s);
                 win.color_set(0);
             } else {
