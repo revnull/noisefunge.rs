@@ -4,4 +4,5 @@ pub mod config;
 pub mod server;
 pub mod api;
 pub mod midi_bridge;
+pub mod subprocess;
 

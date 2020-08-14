@@ -14,6 +14,14 @@ pub struct ChannelConfig {
     pub note_filter: Option<String>,
 }
 
+pub struct SubprocessCommand {
+    pub name: String,
+    pub command: Vec<String>,
+    pub stdin: Option<String>,
+    pub stdout: Option<String>,
+    pub stderr: Option<String>
+}
+
 pub struct FungedConfig {
     pub host: String,
     pub port: u16,
@@ -23,6 +31,7 @@ pub struct FungedConfig {
     pub connections: Vec<(Rc<str>, String)>,
     pub channels: [Option<ChannelConfig>; 256],
     pub preload: Vec<String>,
+    pub subprocesses: Vec<SubprocessCommand>,
     pub log_level: LevelFilter
 }
 
@@ -75,6 +84,54 @@ fn get_preload(settings: &Config) -> Vec<String> {
             Err(e) => panic!("Bad preload: {:?}", e)
         }
     }).collect()
+}
+
+fn get_subprocesses(settings: &Config) -> Vec<SubprocessCommand> {
+    let mut subs = Vec::new();
+
+    for t in settings.get_table("subprocess").unwrap_or(HashMap::new()) {
+        let (name, block) = t;
+
+        let table = block.into_table().expect(
+            &format!("Could not parse subprocess.{}", name));
+
+        let cval = table.get("command")
+                        .expect(&format!("subprocess.{} is missing command",
+                                         name))
+                        .clone();
+        let cmd = if let Ok(s) = cval.clone().into_str() {
+            vec![s]
+        } else if let Ok(v) = cval.into_array() {
+            v.into_iter().map(|s| 
+                s.into_str().expect(
+                    &format!("subprocess.{} has invalid command", name))
+            ).collect()
+        } else {
+            panic!("subprocess.{} has invalid command", name);
+        };
+
+        let stdin = table.get("stdin").map(
+            |v| v.clone().into_str().expect(
+                &format!("subprocess.{} has invalid stdin", name)));
+
+        let stdout = table.get("stdout").map(
+            |v| v.clone().into_str().expect(
+                &format!("subprocess.{} has invalid stdout", name)));
+
+        let stderr = table.get("stderr").map(
+            |v| v.clone().into_str().expect(
+                &format!("subprocess.{} has invalid stderr", name)));
+
+        subs.push(SubprocessCommand {
+            name: name,
+            command: cmd,
+            stdin: stdin,
+            stdout: stdout,
+            stderr: stderr
+            });
+    }
+
+    return subs
 }
 
 impl FungedConfig {
@@ -146,6 +203,8 @@ impl FungedConfig {
 
         let preload = get_preload(&settings);
 
+        let subs = get_subprocesses(&settings);
+
         let log_level = settings.get_str("log_level")
                                 .expect("Invalid log level");
         let log_level = match LevelFilter::from_str(&log_level) {
@@ -161,6 +220,7 @@ impl FungedConfig {
                        connections: connections,
                        channels: channels,
                        preload: preload,
+                       subprocesses: subs,
                        log_level: log_level }
     }
 }

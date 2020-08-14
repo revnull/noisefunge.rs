@@ -8,6 +8,7 @@ use noisefunge::befunge::*;
 use noisefunge::config::*;
 use noisefunge::api::*;
 use noisefunge::midi_bridge::*;
+use noisefunge::subprocess::*;
 use std::fs;
 use std::sync::{Arc};
 use crossbeam_channel::select;
@@ -103,6 +104,8 @@ fn main() {
         .expect("Failed to initialize logger");
 
     let mut server = FungedServer::new(config);
+
+    let _subs = SubprocessHandle::new(&server.config.subprocesses);
 
     let handle = JackHandle::new(&server.config);
     let mut prev_missed = 0;

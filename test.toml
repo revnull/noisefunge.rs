@@ -5,6 +5,9 @@ port = 1312
 beats_in = "jack_midi_clock"
 period = 6
 
+[subprocess.clock]
+command = ["jack_midi_clock", "-b", "132"]
+
 [out.p1]
 connect = "Qsynth1"
 starting = 0
