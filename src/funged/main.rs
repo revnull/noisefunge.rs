@@ -107,13 +107,15 @@ fn main() {
 
     let _subs = SubprocessHandle::new(&server.config.subprocesses);
 
-    let handle = JackHandle::new(&server.config);
+    let mut handle = JackHandle::new(&server.config);
+    let mut connect_handle = handle.take_connect_handle();
     let mut prev_missed = 0;
     let mut bridge = MidiBridge::new(&server.config, &handle);
     let http_serv = ServerHandle::new(&server.config);
     let mut prev_i = 0;
 
     loop {
+        let mut attempt_cleanup = false;
         select! {
             recv(handle.beat_channel) -> msg => {
                 let i = msg.expect("Failed to read from beat channel.");
@@ -121,6 +123,9 @@ fn main() {
                     if j % server.config.period == 0 {
                         let (beat, log) = server.engine.step();
                         bridge.step(beat, &log);
+                    }
+                    if i % 100 == 0 {
+                        attempt_cleanup = true;
                     }
                 };
                 server.update_state();
@@ -137,6 +142,9 @@ fn main() {
                     Err(e) => panic!("Server error: {:?}", e),
                 };
             }
+        }
+        if attempt_cleanup {
+            connect_handle.join();
         }
     }
 }

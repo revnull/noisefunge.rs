@@ -7,9 +7,10 @@ use std::cmp;
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
+use std::thread::{JoinHandle};
 use std::time::Duration;
 use crossbeam_channel::{bounded, Sender, Receiver};
 
@@ -84,10 +85,39 @@ impl<'a> PortMap {
     }
 }
 
+pub struct ConnectHandle {
+    done: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>
+}
+
+impl ConnectHandle {
+    pub fn new(done: Arc<AtomicBool>, handle: JoinHandle<()>) -> Self {
+        ConnectHandle {
+            done: done,
+            handle: Some(handle),
+        }
+    }
+
+    pub fn join(&mut self) {
+        if self.handle.is_none() { return }
+        if self.done.load(Ordering::Relaxed) {
+            let handle = self.handle.take().unwrap();
+            debug!("Joining ConnectHandle");
+            match handle.join() {
+                Ok(_) => { },
+                Err(e) => { error!("Connect thread panicked: {:?}", e) },
+            }
+            self.handle = None;
+            debug!("Joined ConnectHandle");
+        }
+    }
+}
+
 pub struct JackHandle {
     pub beat_channel: Receiver<u64>,
     missed_beats: Arc<AtomicU64>,
     note_channel: Sender<MidiMsg>,
+    connect_handle: Option<ConnectHandle>,
     deactivate: Box<dyn FnOnce()>,
 }
 
@@ -202,7 +232,9 @@ impl JackHandle {
             };
         }
 
-        thread::spawn(move || {
+        let connect_done = Arc::new(AtomicBool::new(false));
+        let connect_done2 = connect_done.clone();
+        let connect_thread = thread::spawn(move || {
             let (connector, _status) =
                 jack::Client::new("connect",ClientOptions::NO_START_SERVER)
                              .expect("Failed to start jack client.");
@@ -241,6 +273,7 @@ impl JackHandle {
                 }
             }
             debug!("All connections established.");
+            connect_done2.store(true, Ordering::Relaxed);
         });
 
         let deact = Box::new(|| { active.deactivate().unwrap(); });
@@ -248,6 +281,8 @@ impl JackHandle {
         JackHandle { beat_channel: rcv2,
                      missed_beats: missed,
                      note_channel: snd1,
+                     connect_handle: Some(
+                        ConnectHandle::new(connect_done, connect_thread)),
                      deactivate: deact }
     }
 
@@ -257,6 +292,11 @@ impl JackHandle {
 
     pub fn send_midi(&self, msg: MidiMsg) -> bool {
         self.note_channel.try_send(msg).is_ok()
+    }
+
+    pub fn take_connect_handle(&mut self) -> ConnectHandle {
+        self.connect_handle.take()
+                           .expect("take_connect_handle already called.")
     }
 
     pub fn shutdown(self) {

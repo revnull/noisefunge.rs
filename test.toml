@@ -5,6 +5,8 @@ port = 1312
 beats_in = "jack_midi_clock:mclk_out"
 period = 6
 
+log_level = "DEBUG"
+
 [subprocess.clock]
 command = ["jack_midi_clock", "-b", "132"]
 
