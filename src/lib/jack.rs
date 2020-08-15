@@ -190,6 +190,18 @@ impl JackHandle {
         }
         connections.push((conf.beat_source.to_string(), String::from(bi_name)));
 
+        let instr_snd = snd1.clone();
+        let mut instrs = Vec::new();
+        for i in 0..=255 {
+            let cc = match &conf.channels[i] {
+                Some(cc) => cc,
+                None => continue
+            };
+            if cc.bank.is_some() || cc.program.is_some() {
+                instrs.push(MidiMsg::Program(i as u8, cc.bank, cc.program));
+            };
+        }
+
         thread::spawn(move || {
             let (connector, _status) =
                 jack::Client::new("connect",ClientOptions::NO_START_SERVER)
@@ -199,11 +211,13 @@ impl JackHandle {
             let mut attempts = 4;
             while !connections.is_empty() {
                 let mut temp_connections = mem::take(&mut connections);
+                let mut new_conn = false;
 
                 for (src, dst) in temp_connections.drain(..) {
                     match connector.connect_ports_by_name(&src, &dst) {
                         Ok(_) => {
                             info!("Connected: {} -> {}", src, dst);
+                            new_conn = true;
                         },
                         Err(e) => {
                             warn!("Failed to connect: {} -> {}: {}",
@@ -212,7 +226,13 @@ impl JackHandle {
                         }
                     }
                 }
-                
+
+                if new_conn {
+                    for m in &instrs {
+                        instr_snd.send(*m).expect("Sender::send failed");
+                    }
+                }
+
                 thread::sleep(sleep_dur);
                 attempts -= 1;
                 if attempts == 0 {
@@ -222,18 +242,8 @@ impl JackHandle {
             }
             debug!("All connections established.");
         });
-        let deact = Box::new(|| { active.deactivate().unwrap(); });
 
-        for i in 0..=255 {
-            let cc = match &conf.channels[i] {
-                Some(cc) => cc,
-                None => continue
-            };
-            if cc.bank.is_some() || cc.program.is_some() {
-                snd1.send(MidiMsg::Program(i as u8, cc.bank, cc.program))
-                    .expect("Sender::send failed");
-            }
-        }
+        let deact = Box::new(|| { active.deactivate().unwrap(); });
 
         JackHandle { beat_channel: rcv2,
                      missed_beats: missed,
