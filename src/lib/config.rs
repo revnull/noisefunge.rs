@@ -29,6 +29,7 @@ pub struct FungedConfig {
     pub period: u64,
     pub locals: HashSet<Rc<str>>,
     pub connections: Vec<(Rc<str>, String)>,
+    pub extra_connections: Vec<(String, String)>,
     pub channels: [Option<ChannelConfig>; 256],
     pub preload: Vec<String>,
     pub subprocesses: Vec<SubprocessCommand>,
@@ -134,6 +135,26 @@ fn get_subprocesses(settings: &Config) -> Vec<SubprocessCommand> {
     return subs
 }
 
+fn get_extra_connections(settings: &Config) -> Vec<(String, String)> {
+    match settings.get_array("extra_connections") {
+        Ok(vals) =>  vals,
+        Err(e) => panic!("Bad extra_connections: {:?}", e),
+    }.into_iter().map(|v| {
+        let mut arr = match v.into_array() {
+            Ok(vals) => vals,
+            Err(e) => panic!("extra_connections needs array: {:?}", e),
+        };
+        if arr.len() != 2 {
+            panic!("Extra connections must have source and destination");
+        }
+        let dst = arr.pop().unwrap().into_str()
+                     .expect("Bad extra_connection destination");
+        let src = arr.pop().unwrap().into_str()
+                     .expect("Bad extra_connection source");
+        (src, dst)
+    }).collect()
+}
+
 impl FungedConfig {
     pub fn read_config(file: &str) -> FungedConfig {
         let mut settings = Config::default();
@@ -212,12 +233,15 @@ impl FungedConfig {
             Err(e) => panic!("Bad log_level: {:?}", e),
         };
 
+        let extra_connections = get_extra_connections(&settings);
+
         FungedConfig { host: host,
                        port: port,
                        beat_source: Rc::from(bi),
                        period: period as u64,
                        locals: locals,
                        connections: connections,
+                       extra_connections: extra_connections,
                        channels: channels,
                        preload: preload,
                        subprocesses: subs,

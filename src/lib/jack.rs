@@ -219,6 +219,7 @@ impl JackHandle {
             connections.push((String::from(src_name), String::from(dst)));
         }
         connections.push((conf.beat_source.to_string(), String::from(bi_name)));
+        connections.extend(conf.extra_connections.clone());
 
         let instr_snd = snd1.clone();
         let mut instrs = Vec::new();
