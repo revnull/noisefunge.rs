@@ -3,10 +3,14 @@ use arr_macro::arr;
 
 use jack::*;
 use log::*;
+use std::cmp;
 use std::collections::HashMap;
+use std::mem;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use crossbeam_channel::{bounded, Sender, Receiver};
 
 use crate::config::{FungedConfig, ChannelConfig};
@@ -177,21 +181,47 @@ impl JackHandle {
 
         let active = client.activate_async((),handler)
                            .expect("Failed to activate client.");
-        let client = active.as_client();
+
+        let mut connections = Vec::new();
+
         for (src, dst) in &conf.connections {
             let src_name = &locals2.get(src).unwrap().name().unwrap();
-            for name in client.ports(Some(dst), None, PortFlags::IS_INPUT) {
-                info!("Connecting: {} -> {}: {:?}", src_name, name,
-                         client.connect_ports_by_name(src_name, &name));
+            connections.push((String::from(src_name), String::from(dst)));
+        }
+        connections.push((conf.beat_source.to_string(), String::from(bi_name)));
+
+        thread::spawn(move || {
+            let (connector, _status) =
+                jack::Client::new("connect",ClientOptions::NO_START_SERVER)
+                             .expect("Failed to start jack client.");
+            let mut connections = connections;
+            let mut sleep_dur = Duration::from_millis(250);
+            let mut attempts = 4;
+            while !connections.is_empty() {
+                let mut temp_connections = mem::take(&mut connections);
+
+                for (src, dst) in temp_connections.drain(..) {
+                    match connector.connect_ports_by_name(&src, &dst) {
+                        Ok(_) => {
+                            info!("Connected: {} -> {}", src, dst);
+                        },
+                        Err(e) => {
+                            warn!("Failed to connect: {} -> {}: {}",
+                                  src, dst, e);
+                            connections.push((src, dst));
+                        }
+                    }
+                }
+                
+                thread::sleep(sleep_dur);
+                attempts -= 1;
+                if attempts == 0 {
+                    attempts = 4;
+                    sleep_dur = cmp::min(2 * sleep_dur, Duration::from_secs(6));
+                }
             }
-        }
-
-        for name in client.ports(Some(&conf.beat_source), None,
-                                 PortFlags::IS_OUTPUT) {
-            info!("Connecting: {} -> {}: {:?}", &name, bi_name,
-                  client.connect_ports_by_name(&name, bi_name));
-        }
-
+            debug!("All connections established.");
+        });
         let deact = Box::new(|| { active.deactivate().unwrap(); });
 
         for i in 0..=255 {

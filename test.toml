@@ -2,30 +2,30 @@
 host = "0.0.0.0"
 port = 1312
 
-beats_in = "jack_midi_clock"
+beats_in = "jack_midi_clock:mclk_out"
 period = 6
 
 [subprocess.clock]
 command = ["jack_midi_clock", "-b", "132"]
 
 [out.p1]
-connect = "Qsynth1"
+connect = "Qsynth1:midi_00"
 starting = 0
 
 [out.p2]
-connect = "Qsynth2"
+connect = "Qsynth2:midi_00"
 starting = 16
 
 [out.p3]
-connect = "Qsynth3"
+connect = "Qsynth3:midi_00"
 starting = 32
 
 [out.p4]
-connect = "Qsynth4"
+connect = "Qsynth4:midi_00"
 starting = 48
 
 [out.p5]
-connect = "Qsynth5"
+connect = "Qsynth5:midi_00"
 starting = 64
 
 [channel.0]
