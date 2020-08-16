@@ -84,4 +84,23 @@ impl SubprocessHandle {
 
         SubprocessHandle(res)
     }
+
+    pub fn check_children(&mut self) {
+        let mut children = mem::take(&mut self.0);
+
+        for (name, mut c) in children.drain(..) {
+            match c.try_wait() {
+                Ok(Some(status)) => {
+                    warn!("Child {} exited with status {}", name, status);
+                },
+                Ok(None) => {
+                    self.0.push((name, c));
+                },
+                Err(e) => {
+                    warn!("Could not wait on child {}: {}", name, e);
+                    self.0.push((name, c));
+                }
+            }
+        }
+    }
 }
