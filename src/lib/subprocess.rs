@@ -1,6 +1,6 @@
 
 use log::*;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::mem;
 use std::process::{Child, Command, Stdio};
 use crate::config::SubprocessCommand;
@@ -59,16 +59,24 @@ impl SubprocessHandle {
 
             let stdout = match sub.stdout.as_ref() {
                 None => { Stdio::inherit() },
-                Some(f) => { File::create(f)
-                                  .expect(&format!("Failed to open {}", f))
-                                  .into() }
+                Some(f) =>
+                    OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(f)
+                                .expect(&format!("Failed to open {}", f))
+                                .into(),
             };
 
             let stderr = match sub.stderr.as_ref() {
                 None => { Stdio::inherit() },
-                Some(f) => { File::create(f)
-                                  .expect(&format!("Failed to open {}", f))
-                                  .into() }
+                Some(f) =>
+                    OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(f)
+                                .expect(&format!("Failed to open {}", f))
+                                .into(),
             };
 
             let child = Command::new(&sub.command[0])
