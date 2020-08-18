@@ -180,7 +180,7 @@ impl JackHandle {
                                         wtr.write(&jack::RawMidi {
                                             time: t,
                                             bytes: &[
-                                                144 + ch, pch, 0
+                                                128 + ch, pch, 0
                                             ] }).expect("write failed");
                                     }
                                     MidiMsg::Program(ch, bank, patch) => {
