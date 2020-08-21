@@ -138,6 +138,7 @@ fn get_subprocesses(settings: &Config) -> Vec<SubprocessCommand> {
 fn get_extra_connections(settings: &Config) -> Vec<(String, String)> {
     match settings.get_array("extra_connections") {
         Ok(vals) =>  vals,
+        Err(ConfigError::NotFound(_)) => Vec::new(),
         Err(e) => panic!("Bad extra_connections: {:?}", e),
     }.into_iter().map(|v| {
         let mut arr = match v.into_array() {
