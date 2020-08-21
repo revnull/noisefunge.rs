@@ -32,8 +32,10 @@ fn main() {
 
     let (filename, baseuri) = read_args();
 
-    let prog = fs::read_to_string(&filename).expect(
-        &format!("Failed to open {}", &filename));
+    let err = format!("Failed to open {}", &filename);
+    let prog = fs::read_to_string(&filename).expect(&err)
+                                            .trim_end_matches('\n')
+                                            .to_string();
 
     let client = Client::builder().user_agent("nfloader")
                                   .build()

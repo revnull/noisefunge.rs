@@ -159,7 +159,7 @@ impl Tile {
                           &tiler.state.names[i], (self.width - 1) as i32);
         }
         win.color_set(2);
-        win.mvaddstr(self.ypos + self.height as i32 - 4,
+        win.mvaddstr(self.ypos + self.height as i32 - 1,
                      self.xpos, &view.buffer);
         win.color_set(0);
 
