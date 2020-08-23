@@ -160,14 +160,19 @@ impl JackHandle {
                             i += 1;
                             match snd2.try_send(i) {
                                 Ok(_) => (),
-                                Err(e) if e.is_full() => { missed2.fetch_add(1, Ordering::Relaxed); },
-                                _ => panic!("try_send failed due to disconnect.")
+                                Err(e) if e.is_full() => {
+                                    missed2.fetch_add(1, Ordering::Relaxed); },
+                                _ => panic!("try_send failed: disconnected")
                             }
                             for msg in r1.try_iter() {
                                 match msg {
                                     MidiMsg::On(ch, pch, vel) => {
-                                        let (ch, wtr) = wtrs.get_writer(ch)
-                                                            .unwrap();
+                                        let (ch, wtr) = match wtrs.get_writer(ch) {
+                                            Some(tup) => tup,
+                                            None => {
+                                                continue;
+                                            },
+                                        };
                                         wtr.write(&jack::RawMidi {
                                             time: t,
                                             bytes: &[
@@ -175,8 +180,12 @@ impl JackHandle {
                                             ] }).expect("write failed");
                                     },
                                     MidiMsg::Off(ch, pch) => {
-                                        let (ch, wtr) = wtrs.get_writer(ch)
-                                                            .unwrap();
+                                        let (ch, wtr) = match wtrs.get_writer(ch) {
+                                            Some(tup) => tup,
+                                            None => {
+                                                continue;
+                                            },
+                                        };
                                         wtr.write(&jack::RawMidi {
                                             time: t,
                                             bytes: &[
@@ -184,8 +193,12 @@ impl JackHandle {
                                             ] }).expect("write failed");
                                     }
                                     MidiMsg::Program(ch, bank, patch) => {
-                                        let (ch, wtr) = wtrs.get_writer(ch)
-                                                            .unwrap();
+                                        let (ch, wtr) = match wtrs.get_writer(ch) {
+                                            Some(tup) => tup,
+                                            None => {
+                                                continue;
+                                            },
+                                        };
                                         if let Some(bank) = bank {
                                             wtr.write(&jack::RawMidi {
                                                 time: t,
