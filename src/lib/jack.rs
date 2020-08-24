@@ -21,7 +21,7 @@ use crate::config::{FungedConfig, ChannelConfig};
 pub enum MidiMsg {
     On(u8, u8, u8),
     Off(u8, u8),
-    Program(u8, Option<u8>, Option<u8>),
+    Program(u8, Option<u16>, Option<u8>),
 }
 
 unsafe impl Send for MidiMsg {}
@@ -239,7 +239,17 @@ impl ProcessHandler for Handler {
                                 if wtr.write(
                                     &jack::RawMidi {
                                         time: t,
-                                        bytes: &[176 + ch, 00, bank]
+                                        bytes: &[176 + ch, 0, (bank >> 7) as u8]
+                                    }).is_err() {
+                                    self.err_channel.try_send(
+                                        JackError::WriteFailed)
+                                    .expect("failed to write error");
+                                }
+                                if wtr.write(
+                                    &jack::RawMidi {
+                                        time: t,
+                                        bytes: &[176 + ch, 32,
+                                                 (bank & 127) as u8]
                                     }).is_err() {
                                     self.err_channel.try_send(
                                         JackError::WriteFailed)

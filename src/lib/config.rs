@@ -9,7 +9,7 @@ use log::*;
 pub struct ChannelConfig {
     pub local: Rc<str>,
     pub starting: u8,
-    pub bank: Option<u8>,
+    pub bank: Option<u16>,
     pub program: Option<u8>,
     pub note_filter: Option<String>,
 }
@@ -216,7 +216,7 @@ impl FungedConfig {
             let table = block.into_table().expect(
                 &format!("Could not parse [channel.{}]", name));
             table.get("bank").and_then(|v| v.clone().into_int().ok())
-                             .map(|b| ch.bank = Some(b as u8));
+                             .map(|b| ch.bank = Some(b as u16));
             table.get("program").and_then(|v| v.clone().into_int().ok())
                                 .map(|b| ch.program = Some(b as u8));
             table.get("note_filter").and_then(|v| v.clone().into_str().ok())

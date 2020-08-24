@@ -10,8 +10,12 @@ log_level = "DEBUG"
 [subprocess.clock]
 command = ["jack_midi_clock", "-b", "132"]
 
+[subprocess.dump]
+command = ["jack_midi_dump"]
+stdout = "/tmp/midi.dump"
+
 [out.p1]
-connect = "Qsynth1:midi_00"
+connect = ["Qsynth1:midi_00", "midi-monitor:input"]
 starting = 0
 
 [out.p2]
@@ -51,6 +55,11 @@ note_filter = "down:1:3:1"
 
 [channel.5]
 program = 14
+note_filter = "bi:2"
+
+[channel.6]
+bank = 128
+program = 25
 note_filter = "bi:2"
 
 [channel.18]
