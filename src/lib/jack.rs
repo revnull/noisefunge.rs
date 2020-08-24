@@ -5,6 +5,7 @@ use jack::*;
 use log::*;
 use std::cmp;
 use std::collections::HashMap;
+use std::fmt;
 use std::mem;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
@@ -113,8 +114,26 @@ impl ConnectHandle {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum JackError {
+    UnknownChannel(u8),
+    WriteFailed,
+}
+
+impl fmt::Display for JackError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            JackError::UnknownChannel(ch) =>
+                write!(f, "unknown channel: {}", ch),
+            JackError::WriteFailed =>
+                write!(f, "write failed"),
+        }
+    }
+}
+
 pub struct JackHandle {
     pub beat_channel: Receiver<u64>,
+    pub err_channel: Receiver<JackError>,
     missed_beats: Arc<AtomicU64>,
     note_channel: Sender<MidiMsg>,
     connect_handle: Option<ConnectHandle>,
@@ -147,6 +166,7 @@ impl JackHandle {
 
         let (snd1, rcv1) = bounded(128);
         let (snd2, rcv2) = bounded(1);
+        let (snd3, rcv3) = bounded(128);
 
         let handler = {
             let r1 = rcv1;
@@ -170,6 +190,8 @@ impl JackHandle {
                                         let (ch, wtr) = match wtrs.get_writer(ch) {
                                             Some(tup) => tup,
                                             None => {
+                                                snd3.try_send(JackError::UnknownChannel(ch))
+                                                    .expect("failed to write error");
                                                 continue;
                                             },
                                         };
@@ -183,6 +205,8 @@ impl JackHandle {
                                         let (ch, wtr) = match wtrs.get_writer(ch) {
                                             Some(tup) => tup,
                                             None => {
+                                                snd3.try_send(JackError::UnknownChannel(ch))
+                                                    .expect("failed to write error");
                                                 continue;
                                             },
                                         };
@@ -196,6 +220,8 @@ impl JackHandle {
                                         let (ch, wtr) = match wtrs.get_writer(ch) {
                                             Some(tup) => tup,
                                             None => {
+                                                snd3.try_send(JackError::UnknownChannel(ch))
+                                                    .expect("failed to write error");
                                                 continue;
                                             },
                                         };
@@ -293,6 +319,7 @@ impl JackHandle {
         let deact = Box::new(|| { active.deactivate().unwrap(); });
 
         JackHandle { beat_channel: rcv2,
+                     err_channel: rcv3,
                      missed_beats: missed,
                      note_channel: snd1,
                      connect_handle: Some(

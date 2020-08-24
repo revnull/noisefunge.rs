@@ -136,6 +136,10 @@ fn main() {
                     prev_missed = missed;
                 }
             },
+            recv(handle.err_channel) -> msg => {
+                let msg = msg.expect("Failed to read from error channel.");
+                error!("Error from jack thread: {:?}", msg);
+            }
             recv(http_serv.channel) -> msg => {
                 match msg {
                     Ok(req) => server.handle(req),
