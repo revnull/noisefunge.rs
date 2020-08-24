@@ -140,6 +140,132 @@ pub struct JackHandle {
     deactivate: Box<dyn FnOnce()>,
 }
 
+struct Handler {
+    beat_channel: Sender<u64>,
+    err_channel: Sender<JackError>,
+    note_channel: Receiver<MidiMsg>,
+    missed_beats: Arc<AtomicU64>,
+    ports: PortMap,
+    beats_in: Port<MidiIn>,
+    beat: u64,
+}
+
+impl Handler {
+    fn new(beat_channel: Sender<u64>, err_channel: Sender<JackError>,
+           note_channel: Receiver<MidiMsg>, missed_beats: Arc<AtomicU64>,
+           ports: PortMap, beats_in: Port<MidiIn>) -> Handler {
+
+        Handler {
+            beat_channel: beat_channel,
+            err_channel: err_channel,
+            note_channel: note_channel,
+            missed_beats: missed_beats,
+            ports: ports,
+            beats_in: beats_in,
+            beat: 0
+        }
+    }
+}
+
+unsafe impl Send for Handler {}
+
+impl ProcessHandler for Handler {
+    fn process(&mut self, _cl: &Client, ps: &ProcessScope) -> Control {
+        let mut wtrs = self.ports.writers(ps);
+
+        for bin in self.beats_in.iter(ps) {
+            if bin.bytes[0] == 248 {
+                let t = bin.time;
+                self.beat += 1;
+                match self.beat_channel.try_send(self.beat) {
+                    Ok(_) => (),
+                    Err(e) if e.is_full() => {
+                        self.missed_beats.fetch_add(1, Ordering::Relaxed); },
+                    _ => panic!("try_send failed: disconnected")
+                }
+                for msg in self.note_channel.try_iter() {
+                    match msg {
+                        MidiMsg::On(ch, pch, vel) => {
+                            let (ch, wtr) = match wtrs.get_writer(ch) {
+                                Some(tup) => tup,
+                                None => {
+                                    self.err_channel.try_send(
+                                        JackError::UnknownChannel(ch))
+                                        .expect("failed to write error");
+                                    continue;
+                                },
+                            };
+                            if wtr.write(
+                                &jack::RawMidi {
+                                    time: t,
+                                    bytes: &[144 + ch, pch, vel]
+                                }).is_err() {
+                                    self.err_channel.try_send(
+                                        JackError::WriteFailed)
+                                        .expect("failed to write error.");
+                            }
+                        },
+                        MidiMsg::Off(ch, pch) => {
+                            let (ch, wtr) = match wtrs.get_writer(ch) {
+                                Some(tup) => tup,
+                                None => {
+                                    self.err_channel.try_send(
+                                        JackError::UnknownChannel(ch))
+                                        .expect("failed to write error");
+                                    continue;
+                                },
+                            };
+                            if wtr.write(
+                                &jack::RawMidi {
+                                    time: t,
+                                    bytes: &[128 + ch, pch, 0]
+                                }).is_err() {
+                                    self.err_channel.try_send(
+                                        JackError::WriteFailed)
+                                    .expect("failed to write error");
+                            }
+                        },
+                        MidiMsg::Program(ch, bank, patch) => {
+                            let (ch, wtr) = match wtrs.get_writer(ch) {
+                                Some(tup) => tup,
+                                None => {
+                                    self.err_channel.try_send(
+                                        JackError::UnknownChannel(ch))
+                                        .expect("failed to write error");
+                                    continue;
+                                },
+                            };
+                            if let Some(bank) = bank {
+                                if wtr.write(
+                                    &jack::RawMidi {
+                                        time: t,
+                                        bytes: &[176 + ch, 00, bank]
+                                    }).is_err() {
+                                    self.err_channel.try_send(
+                                        JackError::WriteFailed)
+                                    .expect("failed to write error");
+                                }
+                            }
+                            if let Some(patch) = patch {
+                                if wtr.write(
+                                    &jack::RawMidi {
+                                        time: t,
+                                        bytes: &[192 + ch, patch]
+                                    }).is_err() {
+                                    self.err_channel.try_send(
+                                        JackError::WriteFailed)
+                                    .expect("failed to write error");
+                                }
+                            }
+                        },
+                    }
+                }
+            }
+        }
+        Control::Continue
+    }
+}
+
 impl JackHandle {
     pub fn new(conf : &FungedConfig) -> JackHandle {
         let (client, _status) =
@@ -153,7 +279,6 @@ impl JackHandle {
         let mut locals = HashMap::new();
         let mut locals2 = HashMap::new();
         let missed = Arc::new(AtomicU64::new(0));
-        let missed2 = missed.clone();
 
         for name in &conf.locals {
             let port = client.register_port(name, MidiOut::default())
@@ -162,92 +287,15 @@ impl JackHandle {
             locals.insert(name.clone(), port);
         }
 
-        let mut portmap = PortMap::new(&conf.channels, locals);
+        //let mut portmap = PortMap::new(&conf.channels, locals);
 
         let (snd1, rcv1) = bounded(128);
         let (snd2, rcv2) = bounded(1);
         let (snd3, rcv3) = bounded(128);
 
-        let handler = {
-            let r1 = rcv1;
-            let mut i :u64 = 0;
-            ClosureProcessHandler::new(
-                move |_cl: &Client, ps: &ProcessScope| -> Control {
-                    let mut wtrs = portmap.writers(ps);
-                    for bin in beats_in.iter(ps) {
-                        if bin.bytes[0] == 248 {
-                            let t = bin.time;
-                            i += 1;
-                            match snd2.try_send(i) {
-                                Ok(_) => (),
-                                Err(e) if e.is_full() => {
-                                    missed2.fetch_add(1, Ordering::Relaxed); },
-                                _ => panic!("try_send failed: disconnected")
-                            }
-                            for msg in r1.try_iter() {
-                                match msg {
-                                    MidiMsg::On(ch, pch, vel) => {
-                                        let (ch, wtr) = match wtrs.get_writer(ch) {
-                                            Some(tup) => tup,
-                                            None => {
-                                                snd3.try_send(JackError::UnknownChannel(ch))
-                                                    .expect("failed to write error");
-                                                continue;
-                                            },
-                                        };
-                                        wtr.write(&jack::RawMidi {
-                                            time: t,
-                                            bytes: &[
-                                                144 + ch, pch, vel
-                                            ] }).expect("write failed");
-                                    },
-                                    MidiMsg::Off(ch, pch) => {
-                                        let (ch, wtr) = match wtrs.get_writer(ch) {
-                                            Some(tup) => tup,
-                                            None => {
-                                                snd3.try_send(JackError::UnknownChannel(ch))
-                                                    .expect("failed to write error");
-                                                continue;
-                                            },
-                                        };
-                                        wtr.write(&jack::RawMidi {
-                                            time: t,
-                                            bytes: &[
-                                                128 + ch, pch, 0
-                                            ] }).expect("write failed");
-                                    }
-                                    MidiMsg::Program(ch, bank, patch) => {
-                                        let (ch, wtr) = match wtrs.get_writer(ch) {
-                                            Some(tup) => tup,
-                                            None => {
-                                                snd3.try_send(JackError::UnknownChannel(ch))
-                                                    .expect("failed to write error");
-                                                continue;
-                                            },
-                                        };
-                                        if let Some(bank) = bank {
-                                            wtr.write(&jack::RawMidi {
-                                                time: t,
-                                                bytes: &[
-                                                    176 + ch, 00, bank
-                                                ] }).expect("write failed");
-                                        }
-                                        if let Some(patch) = patch {
-                                            wtr.write(&jack::RawMidi {
-                                                time: t,
-                                                bytes: &[
-                                                    192 + ch, patch
-                                                ] }).expect("write failed");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Control::Continue
-                })
-            };
-
+        let handler = Handler::new(snd2, snd3, rcv1, missed.clone(),
+                                   PortMap::new(&conf.channels, locals),
+                                   beats_in);
         let active = client.activate_async((),handler)
                            .expect("Failed to activate client.");
 
