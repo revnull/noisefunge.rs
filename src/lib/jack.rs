@@ -22,6 +22,7 @@ pub enum MidiMsg {
     On(u8, u8, u8),
     Off(u8, u8),
     Program(u8, Option<u16>, Option<u8>),
+    Pan(u8, u8),
 }
 
 unsafe impl Send for MidiMsg {}
@@ -268,6 +269,27 @@ impl ProcessHandler for Handler {
                                 }
                             }
                         },
+                        MidiMsg::Pan(ch, pan) => {
+                            let (ch, wtr) = match wtrs.get_writer(ch) {
+                                Some(tup) => tup,
+                                None => {
+                                    self.err_channel.try_send(
+                                        JackError::UnknownChannel(ch))
+                                        .expect("failed to write error");
+                                    continue;
+                                },
+                            };
+                            if wtr.write(
+                                &jack::RawMidi {
+                                    time: t,
+                                    bytes: &[176 + ch, 10,
+                                             (pan & 127) as u8]
+                                }).is_err() {
+                                self.err_channel.try_send(
+                                    JackError::WriteFailed)
+                                .expect("failed to write error");
+                            }
+                        },
                     }
                 }
             }
@@ -328,6 +350,9 @@ impl JackHandle {
             if cc.bank.is_some() || cc.program.is_some() {
                 instrs.push(MidiMsg::Program(i as u8, cc.bank, cc.program));
             };
+            if let Some(pan) = cc.pan {
+                instrs.push(MidiMsg::Pan(i as u8, pan));
+            }
         }
 
         let connect_done = Arc::new(AtomicBool::new(false));

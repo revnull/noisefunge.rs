@@ -40,10 +40,12 @@ program = 0
 [channel.1]
 program = 0
 note_filter = "solo"
+pan = 0
 
 [channel.2]
-program = 8
+program = 0
 note_filter = "random:4:4:6"
+pan = 127
 
 [channel.3]
 program = 12

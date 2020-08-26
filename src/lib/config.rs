@@ -11,6 +11,7 @@ pub struct ChannelConfig {
     pub starting: u8,
     pub bank: Option<u16>,
     pub program: Option<u8>,
+    pub pan: Option<u8>,
     pub note_filter: Option<String>,
 }
 
@@ -198,6 +199,7 @@ impl FungedConfig {
                                             starting: ch as u8,
                                             bank: None,
                                             program: None,
+                                            pan: None,
                                             note_filter: None });
                     }
                 }
@@ -219,6 +221,8 @@ impl FungedConfig {
                              .map(|b| ch.bank = Some(b as u16));
             table.get("program").and_then(|v| v.clone().into_int().ok())
                                 .map(|b| ch.program = Some(b as u8));
+            table.get("pan").and_then(|v| v.clone().into_int().ok())
+                                .map(|b| ch.pan = Some(b as u8));
             table.get("note_filter").and_then(|v| v.clone().into_str().ok())
                                     .map(|f| ch.note_filter = Some(f));
         }
