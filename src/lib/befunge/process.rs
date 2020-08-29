@@ -233,6 +233,10 @@ impl Process {
         self.data_stack.pop()
     }
 
+    pub fn null(&self) -> bool {
+        self.data_stack.is_empty()
+    }
+
     pub fn die(&mut self, reason: CrashReason) {
         self.state = ProcessState::Crashed(reason)
     }

@@ -116,6 +116,9 @@ impl OpSet {
             make_op!(58, "Dup", "Duplicate value at top of stack.", dup));
         ops.insert_safe(
             make_op!(92, "Swap", "Pop x and y. Push x and y.", swap));
+        ops.insert_safe(
+            make_op!(78, "Null?", "Push 1 if stack is empty, otherwise 0",
+                     null));
 
         ops.insert_safe(
             make_op!(91, "Defop", "Define user opcode.", defop));
@@ -453,6 +456,14 @@ fn swap(proc: &mut Process) {
     let d = pop!(proc);
     proc.push(c);
     proc.push(d);
+}
+
+fn null(proc: &mut Process) {
+    if proc.null() {
+        proc.push(1);
+    } else {
+        proc.push(0);
+    }
 }
 
 fn drop(proc: &mut Process) {
