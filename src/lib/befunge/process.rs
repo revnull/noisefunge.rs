@@ -1,5 +1,6 @@
 
 use std::cmp::max;
+use std::fmt;
 use std::rc::Rc;
 use std::mem;
 use serde::{Serialize, Deserialize};
@@ -11,14 +12,32 @@ pub enum Dir { U, D, L, R }
 #[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct PC(pub usize);
 
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub struct Prog { width : usize, data : Vec<u8> }
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
+pub enum ParseError {
+    Empty,
+    TooManyLines,
+    LineTooLong
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ParseError::*;
+        match self {
+            Empty => write!(f, "Empty program"),
+            TooManyLines => write!(f, "too many lines"),
+            LineTooLong => write!(f, "too long lines"),
+        }
+    }
+}
 
 impl Prog {
 
-    pub fn parse(prog: &str) -> Result<Prog, &'static str> {
+    pub fn parse(prog: &str) -> Result<Prog, ParseError> {
         if prog.len() == 0 {
-            return Err("Empty program.");
+            return Err(ParseError::Empty);
         }
         let mut lines = Vec::new();
         let mut longest = 0;
@@ -27,13 +46,13 @@ impl Prog {
             longest = max(longest, line.bytes().count());
         }
         if longest == 0 {
-            return Err("Program is empty.");
+            return Err(ParseError::Empty);
         }
         if lines.len() > 255 {
-            return Err("Too many lines in program.");
+            return Err(ParseError::TooManyLines);
         }
         if longest > 255 {
-            return Err("Longest line is too long.");
+            return Err(ParseError::LineTooLong);
         }
         let mut mem = Vec::new();
         for line in lines {
@@ -412,8 +431,9 @@ mod tests {
 
     #[test]
     fn bad_prog() {
-        assert!(Prog::parse("").is_err(), "Empty program");
-        assert!(Prog::parse("\n\n\n\n\n").is_err(), "Only newlines");
+        use ParseError::*;
+        assert_eq!(Prog::parse(""), Err(Empty));
+        assert_eq!(Prog::parse("\n\n\n\n\n"), Err(Empty));
 
         let mut long_line = String::with_capacity(512);
         let mut too_many = String::with_capacity(512);
@@ -423,8 +443,8 @@ mod tests {
             too_many.push_str("a\n");
         }
 
-        assert!(Prog::parse(&long_line).is_err(), "Long line");
-        assert!(Prog::parse(&too_many).is_err(), "Too many lines.");
+        assert_eq!(Prog::parse(&long_line), Err(LineTooLong));
+        assert_eq!(Prog::parse(&too_many), Err(TooManyLines));
     }
 
 }
