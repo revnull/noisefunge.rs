@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::cmp;
 use std::rc::Rc;
 use arr_macro::arr;
 
@@ -41,6 +42,10 @@ impl OpSet {
         ops.insert_safe(
             make_op!(63, "Rand(Dir)", "Change to random direction.",
                      rand_direction));
+        ops.insert_safe(
+            make_op!(82, "Rand(Byte)",
+                     "Pop x and y. Push a number between (inclusive)",
+                     rand_range));
 
         ops.insert_safe(make_op!(34, "Quote", "Start/Stop quote mode", quote));
 
@@ -263,6 +268,16 @@ fn rand_direction(proc: &mut Process) {
         _ => panic!("Random number out of range [0,4)")
     };
     proc.set_direction(dir);
+}
+
+fn rand_range(proc: &mut Process) {
+    let mut rng = rand::thread_rng();
+    let x = pop!(proc);
+    let y = pop!(proc);
+    let rmin = cmp::min(x, y) as u16;
+    let rmax = cmp::max(x, y) as u16 + 1;
+    let z = rng.gen_range(rmin, rmax);
+    proc.push(z as u8);
 }
 
 fn sleep(proc: &mut Process) {
