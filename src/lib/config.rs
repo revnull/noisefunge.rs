@@ -220,7 +220,7 @@ impl FungedConfig {
             table.get("bank").and_then(|v| v.clone().into_int().ok())
                              .map(|b| ch.bank = Some(b as u16));
             table.get("program").and_then(|v| v.clone().into_int().ok())
-                                .map(|b| ch.program = Some(b as u8));
+                                .map(|b| ch.program = Some((b - 1) as u8));
             table.get("pan").and_then(|v| v.clone().into_int().ok())
                                 .map(|b| ch.pan = Some(b as u8));
             table.get("note_filter").and_then(|v| v.clone().into_str().ok())
