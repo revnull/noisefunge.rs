@@ -189,7 +189,7 @@ impl OpSet {
 
     fn insert_safe(&mut self, op: Op) {
         if self.0[op.opcode as usize].is_some() {
-            panic!(format!("Duplicate opcode for {:X}", op.opcode));
+            panic!("Duplicate opcode for {:X}", op.opcode);
         }
         self.insert(op)
     }

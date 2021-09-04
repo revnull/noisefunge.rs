@@ -485,7 +485,7 @@ impl<'a> MidiBridge<'a> {
                 Some(s) => {
                     match FilterSpec::parse(s) {
                         Ok(spec) => spec,
-                        Err(err) => panic!(err),
+                        Err(err) => panic!("{}", err),
                     }
                 }
             };
