@@ -60,6 +60,9 @@ impl OpSet {
         ops.insert_safe(
             make_op!(110, "Note", "Pop o and x. Push (o*12)+x.",
                      push_note));
+        ops.insert_safe(
+            make_op!(98, "Bits", "Pop x. Pop x items. Push a bitmask.",
+                     bits));
 
 
         ops.insert_safe(
@@ -245,6 +248,18 @@ fn push_note(proc: &mut Process) {
     let note = pop!(proc);
     proc.push((oct * 12) + note);
 }
+
+fn bits(proc: &mut Process) {
+    let c = pop!(proc);
+    let mut r = 0;
+    for _ in 0..c {
+        r = r << 1;
+        let x = pop!(proc);
+        if x != 0 { r |= 1 }
+    }
+    proc.push(r);
+}
+
 fn set_direction(dir: Dir) -> Op {
     let (opcode, name) = match dir {
         Dir::U => (94, "Up"),
