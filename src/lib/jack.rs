@@ -322,7 +322,7 @@ impl JackHandle {
         //let mut portmap = PortMap::new(&conf.channels, locals);
 
         let (snd1, rcv1) = bounded(128);
-        let (snd2, rcv2) = bounded(1);
+        let (snd2, rcv2) = bounded(4);
         let (snd3, rcv3) = bounded(128);
 
         let handler = Handler::new(snd2, snd3, rcv1, missed.clone(),

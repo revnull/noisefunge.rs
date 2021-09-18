@@ -125,6 +125,7 @@ impl Filter for Basic {
     fn push(&mut self, note: &Note, handle: &JackHandle) {
         let beat = self.current.expect("Basic::push without activate");
         let i = note.pch as usize;
+        if i >= 127 { return }
         if self.active[i] { return }
         self.active[i] = true;
 
