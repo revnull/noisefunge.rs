@@ -1,3 +1,19 @@
+/*
+    Noisefunge Copyright (C) 2021 Rev. Johnny Healey <rev.null@gmail.com>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 
 use noisefunge::api::*;
 use clap::{Arg, App};
@@ -84,7 +100,12 @@ impl Tile {
             Some(p) => p,
         };
 
-        let (width, height, text) = &tiler.progs[proc.prog];
+        let (pi, pc) = match proc.call_stack.last() {
+            None => return None,
+            Some((pi, pc)) => (*pi, *pc),
+        };
+
+        let (width, height, text) = &tiler.progs[pi];
         let width = *width;
         let height = *height;
         let display_height = height as i32 + 3;
@@ -115,7 +136,7 @@ impl Tile {
                 win.mv(y, self.xpos);
                 y += 1;
             }
-            if i == proc.pc {
+            if i == pc {
                 if proc.active {
                     win.color_set(3);
                 } else {
@@ -154,16 +175,16 @@ impl Tile {
             win.color_set(6);
         }
         win.mvaddstr(self.ypos + self.height as i32 - 3, self.xpos, &pid_str);
-        if let Some(i) = proc.name {
-            win.mvaddnstr(self.ypos + self.height as i32 - 2, self.xpos,
-                          &tiler.state.names[i], (self.width - 1) as i32);
-        }
+        let i = proc.name;
+        win.mvaddnstr(self.ypos + self.height as i32 - 2, self.xpos,
+                      &tiler.state.names[i], (self.width - 1) as i32);
+
         win.color_set(2);
         win.mvaddstr(self.ypos + self.height as i32 - 1,
                      self.xpos, &view.buffer);
         win.color_set(0);
 
-        view.last_pc = Some((Rc::clone(text), proc.pc));
+        view.last_pc = Some((Rc::clone(text), pc));
         self.view = Some(view);
 
         if allow_split && display_width < self.width {
@@ -255,7 +276,15 @@ impl TileRow {
                 },
                 Some(proc) => proc,
             };
-            let (width, height, _text) = &tiler.progs[proc.prog];
+
+            let pi = match proc.call_stack.last() {
+                None => {
+                    unused.pop();
+                    continue;
+                },
+                Some((pi, _)) => *pi,
+            };
+            let (width, height, _text) = &tiler.progs[pi];
             let width = *width;
             let height = *height;
             let display_width = width as i32 + 1;
@@ -388,7 +417,15 @@ impl Tiler {
                 },
                 Some(proc) => proc,
             };
-            let (_width, height, _text) = &self.progs[proc.prog];
+
+            let (_width, height, _text) = match proc.call_stack.last() {
+                Some((pi, _)) => &self.progs[*pi],
+                None => {
+                    unused.pop();
+                    continue;
+                },
+            };
+
             let display_height = *height as i32 + 3;
             if y + display_height > maxy {
                 unused.pop();

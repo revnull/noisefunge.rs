@@ -1,3 +1,19 @@
+/*
+    Noisefunge Copyright (C) 2021 Rev. Johnny Healey <rev.null@gmail.com>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 
 use clap::{Arg, App};
 use noisefunge::api::*;
@@ -71,7 +87,6 @@ fn main() {
     let mut err = None;
     let mut needs_redraw = true;
     let mut ordering = OrderBy::DataStack;
-    let unnamed = String::from("-");
 
     'outer: loop {
 
@@ -118,7 +133,7 @@ fn main() {
                         pid: *pid,
                         stack_size: match &ordering {
                             OrderBy::DataStack => proc.data_stack,
-                            OrderBy::CallStack => proc.call_stack,
+                            OrderBy::CallStack => proc.call_stack.len(),
                         },
                     });
                 }
@@ -129,7 +144,7 @@ fn main() {
                         Some(op) => op.pid,
                     };
                     let proc = st.procs.get(&pid).unwrap();
-                    let name = proc.name.map(|i| &st.names[i]).unwrap_or(&unnamed);
+                    let name = st.names.get(proc.name).unwrap();
 
                     window.color_set(0);
                     window.mvaddstr(y, 0, format!("{:X}", pid));
@@ -137,8 +152,8 @@ fn main() {
                     if proc.data_stack > 32 { window.color_set(1); }
                     window.mvaddstr(y, 32, format!("{}", proc.data_stack));
                     window.color_set(0);
-                    if proc.call_stack > 32 { window.color_set(1); }
-                    window.mvaddstr(y, 40, format!("{}", proc.call_stack));
+                    if proc.call_stack.len() > 32 { window.color_set(1); }
+                    window.mvaddstr(y, 40, format!("{}", proc.call_stack.len()));
                     window.color_set(0);
 
                     window.color_set(0);

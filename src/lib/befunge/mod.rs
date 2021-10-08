@@ -1,3 +1,19 @@
+/*
+    Noisefunge Copyright (C) 2021 Rev. Johnny Healey <rev.null@gmail.com>
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 
 mod process;
 mod ops;
@@ -453,30 +469,36 @@ impl Engine {
         let mut procs = HashMap:: new();
 
         for (pid, proc) in &self.procs {
+
+            let mut call_stack : Vec<(usize, usize)> = Vec::new();
+            for ps in proc.call_stack() {
+                let mem = Rc::clone(&ps.memory);
+                let prog_index = prog_map.entry(mem).or_insert_with(|| {
+                    progs.push(ps.memory.state_tuple(&self.charmap));
+                    progs.len() - 1
+                });
+                let PC(pc) = ps.pc;
+                call_stack.push((*prog_index, pc));
+            }
+            /*
             let top = match proc.top() {
                 None => continue,
                 Some(top) => top
             };
-            let mem = Rc::clone(&top.memory);
-            let prog_index = prog_map.entry(mem).or_insert_with(|| {
-                progs.push(top.memory.state_tuple(&self.charmap));
-                progs.len() - 1
-            });
+            */
+
             let name_index = proc.name.as_ref().map(|name| {
                 *name_map.entry(Rc::clone(name)).or_insert_with(|| {
                     names.push(name.to_string());
                     names.len() - 1
                 })
-            });
+            }).expect("No index for name");
 
-            let PC(pc) = top.pc;
             procs.insert(*pid, ProcState { name: name_index,
-                                           prog: *prog_index,
-                                           pc: pc,
+                                           call_stack: call_stack,
                                            active: proc.is_running(),
                                            output: proc.get_output(),
                                            data_stack: proc.data_stack_size(),
-                                           call_stack: proc.call_stack_size(),
                                            play: proc.get_played_note(),
                                          });
         }
