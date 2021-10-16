@@ -1,6 +1,6 @@
 [package]
 name = "noisefunge"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Rev. Johnny Healey <rev.null@gmail.com>"]
 edition = "2018"
 license = "GPL-3.0"
@@ -69,3 +69,4 @@ luminance-windowing = "^0.9"
 luminance-glyph = "0.2.0"
 ab_glyph = "0.2.11"
 luminance-derive = "0.6.3"
+

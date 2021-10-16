@@ -22,13 +22,17 @@ use glfw::{Action, Context as _, Key, WindowEvent};
 use luminance_glfw::GlfwSurface;
 use luminance_windowing::{WindowDim, WindowOpt};
 use luminance::{context::GraphicsContext, pipeline::PipelineState};
-use ab_glyph::{Font,ScaleFont};
-use luminance_glyph::{GlyphBrushBuilder, Section, Layout, HorizontalAlign};
+use ab_glyph::{Font,ScaleFont,FontArc};
+use luminance_glyph::{GlyphBrushBuilder, GlyphBrush, Section, Layout,
+                      HorizontalAlign, Instance};
 use luminance_derive::{Semantics, Vertex};
 use luminance::render_state::RenderState;
 use luminance::tess::{Mode, Interleaved, Tess};
 use luminance::backend;
 use luminance::blending::{Equation, Factor, Blending};
+use luminance::pipeline::{TextureBinding};
+use luminance::pixel::{NormR8UI, NormUnsigned};
+use luminance::texture::{Dim2};
 use glyph_brush::Text;
 use std::collections::{HashSet, HashMap};
 use std::cmp;
@@ -48,6 +52,26 @@ impl VertexRGBA {
     fn with_alpha(&self, alpha: f32) -> Self {
         VertexRGBA::new([self[0], self[1], self[2], alpha])
     }
+
+    fn invert(&self) -> Self {
+        VertexRGBA::new([1. - self[0], 1. - self[1], 1. - self[2], self[3]])
+    }
+
+    fn rgb_mul(&self, x: f32) -> Self {
+        VertexRGBA::new([self[0] * x, self[1] * x, self[2] * x, self[3]])
+    }
+
+    fn rgb_shift(&self, x: u64) -> Self {
+        match x % 6 {
+            1 => VertexRGBA::new([self[1], self[2], self[0], self[3]]),
+            2 => VertexRGBA::new([self[2], self[0], self[1], self[3]]),
+            3 => VertexRGBA::new([self[0], self[2], self[1], self[3]]),
+            4 => VertexRGBA::new([self[1], self[0], self[2], self[3]]),
+            5 => VertexRGBA::new([self[2], self[1], self[0], self[3]]),
+            _ => *self
+        }
+    }
+
 }
 
 const VS_STR: &str = include_str!("vert.glsl");
@@ -328,7 +352,7 @@ impl Scroll {
     }
 }
 
-struct Fade(usize, VertexRGBA, Instant);
+struct Fade<A>(A, VertexRGBA, Instant);
 
 struct Animated {
     pid: u64,
@@ -338,8 +362,9 @@ struct Animated {
     max_height: usize,
     call_stack: Vec<(Rc<ProgText>, usize)>,
     output: String,
-    fades: Vec<Fade>,
-    ended: Option<Instant>
+    fades: Vec<Fade<usize>>,
+    ended: Option<Instant>,
+    played: Option<Fade<()>>
 }
 
 impl Animated {
@@ -361,12 +386,14 @@ impl Animated {
             call_stack: call_stack,
             output: String::new(),
             fades: Vec::new(),
-            ended: None
+            ended: None,
+            played: None
         }
     }
 
     fn update(&mut self, call_stack: Vec<(Rc<ProgText>, usize)>,
-              output: Option<String>, now: Instant, screen: &ScreenSettings) {
+              output: Option<String>, played: bool, now: Instant,
+              screen: &ScreenSettings) {
 
         match &self.ended {
             Some(_) => return,
@@ -377,6 +404,22 @@ impl Animated {
             self.ended = Some(now);
             return;
         }
+
+        let highlight = screen.highlight.rgb_shift(self.pid);
+        let old_played = take(&mut self.played);
+        self.played = match (played, old_played) {
+            (true, _) => {
+                Some(Fade((), highlight.invert(), now))
+            },
+            (_, Some(f)) => { 
+                if now.duration_since(f.2) < Duration::from_secs(2) {
+                    Some(f)
+                } else {
+                    None
+                }
+            },
+            _ => { None },
+        };
 
         let old_stack = replace(&mut self.call_stack, call_stack);
         let new_top = self.call_stack.last().expect("Empty stack");
@@ -404,7 +447,7 @@ impl Animated {
 
             // Push new fade if pc changed.
             if new_top.1 != old_top.1 {
-                self.fades.push(Fade(old_top.1, screen.highlight, now));
+                self.fades.push(Fade(old_top.1, highlight, now));
             }
         }
 
@@ -442,24 +485,53 @@ impl Animated {
         }
     }
 
+    fn bounds(&self, screen: &ScreenSettings, now: Instant) -> Option<Bounds> {
+        let pos : (f32, f32) = match self.scroll.pos(now) {
+            None => return None,
+            Some(p) => p,
+        };
+
+        let Dimensions(w, h) = screen.dims;
+        let w = w as f32;
+        let h = h as f32;
+
+        let lft = pos.0 - 4.;
+        let lft = if lft < 0. { 0. } else { lft };
+        let top = pos.1 - 2.;
+        let top = if top < 0. { 0. } else { top };
+        let rgt = pos.0 + self.max_width as f32 * screen.large_font.0 + 4.;
+        let rgt = if rgt > w { w } else { rgt };
+        let bot = pos.1 + self.max_height as f32 * screen.large_font.1 +
+                    2. * screen.small_font.1 + 2.;
+        let bot = if bot > h { h } else { bot };
+
+        Some(Bounds::new(top, lft, bot, rgt))
+    }
+
 }
 
 impl<'a> Animated {
     fn animate<B,C>(&'a self, ctxt: &mut C,
-                    tess_queue : &mut Vec<Tess<B, Vertex>>,
-                    sections: &mut Vec<Section<'a>>,
+                    layer: &mut Layer<B>,
+                    rear_brush: &mut GlyphBrush<B>,
                     screen: &ScreenSettings, depth: f32,
-                    now: Instant)
+                    now: Instant) -> f32
     where
         C: GraphicsContext<Backend = B>,
-        B: ?Sized + backend::tess::Tess<Vertex, (), (), Interleaved>
-                  + backend::tess::Tess<(), (), (), Interleaved>
+        [[f32; 4]; 4]: backend::shader::Uniformable<B>,
+        TextureBinding<Dim2, NormUnsigned>: backend::shader::Uniformable<B>,
+        B: backend::tess::Tess<Vertex, (), (), Interleaved>
+           + backend::tess::Tess<(), (), (), Interleaved>
+           + backend::tess::Tess<(), u32, Instance, Interleaved>
+           + backend::pipeline::PipelineTexture<Dim2, NormR8UI>
     {
 
-        let mut stack = self.call_stack.iter().rev();
-        let top = stack.next().expect("Failed to get top.");
-        let ptext = &top.0;
+        let pos : (f32, f32) = match self.scroll.pos(now) {
+            None => return depth,
+            Some(p) => p,
+        };
 
+        let dims = screen.dims;
         let alpha = match self.ended {
             None => 1.,
             Some(e) => {
@@ -468,34 +540,50 @@ impl<'a> Animated {
             }
         };
 
-        let pos : (f32, f32) = match self.scroll.pos(now) {
-            None => return,
-            Some(p) => p,
-        };
-
-        sections.push(Section::default()
-            .with_screen_position(pos)
-            .add_text(Text::new(&self.label)
-                .with_z(depth)
-                .with_color([0., 1., 0., alpha])
-                .with_scale(screen.small_font.1)));
-
+        let mut depth = depth;
+        let mut stack_iter = self.call_stack.iter().rev().take(4);
+        let last = stack_iter.next().expect("Failed to get top of stack");
+        let ptext = &last.0;
         let body_top = pos.1 + screen.small_font.1;
-        sections.push(Section::default()
-            .with_screen_position((pos.0, body_top))
-            .add_text(ptext.text(screen, alpha, depth)));
+        let stack_items : Vec<&(Rc<ProgText>, usize)> =
+            stack_iter.rev().collect();
 
-        let output_top = body_top + screen.large_font.1 *
-            self.max_height as f32;
-        sections.push(Section::default()
-            .with_screen_position((pos.0, output_top))
-            .add_text(Text::new(&self.output)
-                .with_z(depth)
-                .with_color([0., 0., 1., alpha])
-                .with_scale(screen.small_font.1)));
+        let mut stack_alpha = alpha * alpha *
+            1. / 2_i32.pow(stack_items.len() as u32) as f32;
+        let mut stack_depth = 0.999;
+        for (pt, _pc) in stack_items {
+            rear_brush.queue(Section::default()
+                .with_screen_position((pos.0, body_top))
+                .add_text(pt.text(screen, stack_alpha, stack_depth)));
+            
+            stack_depth -= 0.001;
+            stack_alpha *= 2.;
+        }
 
-        let dims = screen.dims;
+        depth -= 0.001;
+        let bnds = self.bounds(screen, now).expect("Can't get bounds.");
 
+        let l = dims.project_x(bnds.lft);
+        let r = dims.project_x(bnds.rgt);
+        let t = dims.project_y(bnds.top);
+        let b = dims.project_y(bnds.bot);
+        let bg = match &self.played {
+            Some(Fade(_, rgba, start)) => {
+                let age = now.duration_since(*start).as_secs_f32();
+                let mul = 0.5 * (2. - age);
+                rgba.rgb_mul(mul * mul)
+            },
+            _ => VertexRGBA::new([0.0, 0.0, 0.0, 1.0])
+        }.with_alpha(0.5 * alpha);
+        let vtxs = [Vertex::new(VertexPosition::new([l, t, depth]), bg),
+                    Vertex::new(VertexPosition::new([r, t, depth]), bg),
+                    Vertex::new(VertexPosition::new([r, b, depth]), bg),
+                    Vertex::new(VertexPosition::new([l, b, depth]), bg)];
+        layer.boxes.push(ctxt.new_tess()
+                .set_vertices(vtxs)
+                .set_mode(Mode::TriangleFan)
+                .build()
+                .expect("Failed to make background."));
         let mut draw_highlight = |p: usize, hl: VertexRGBA, d: f32| {
             let pc_y = p / ptext.width;
             let pc_x = p % ptext.width;
@@ -516,39 +604,48 @@ impl<'a> Animated {
                         Vertex::new(VertexPosition::new([r, t, d]), hl),
                         Vertex::new(VertexPosition::new([r, b, d]), hl),
                         Vertex::new(VertexPosition::new([l, b, d]), hl)];
-            tess_queue.push(ctxt.new_tess()
+            layer.boxes.push(ctxt.new_tess()
                 .set_vertices(vtxs)
                 .set_mode(Mode::TriangleFan)
                 .build()
                 .expect("Failed to make highlight."));
         };
-
-        if let Some((_, pc)) = &self.call_stack.last() {
-            let hl = screen.highlight.with_alpha(alpha);
-            draw_highlight(*pc, hl, depth + 0.001);
-        }
-
-        let now = Instant::now();
-        let mut d = depth + 0.001;
-        for Fade(fade_pc, hl, start) in self.fades.iter().rev() {
+        
+        for Fade(fade_pc, hl, start) in &self.fades {
             let age = now.duration_since(*start).as_secs_f32();
             if age > 2. { continue }
             let alpha = 0.45 * (2. - age);
             let alpha = alpha * alpha;
-            draw_highlight(*fade_pc, hl.with_alpha(alpha), d);
-            d += 0.001;
+            draw_highlight(*fade_pc, hl.with_alpha(alpha), depth);
+            depth -= 0.001;
         }
 
-        let mut stack_alpha = alpha * alpha * 0.25;
-        for (pt, _pc) in stack {
-            sections.push(Section::default()
-                .with_screen_position((pos.0, body_top))
-                .add_text(pt.text(screen, stack_alpha, d)));
-            
-            d += 0.001;
-            stack_alpha *= 0.5;
-        }
+        let hl = screen.highlight.rgb_shift(self.pid).with_alpha(alpha);
+        draw_highlight(last.1, hl, depth);
+        depth -= 0.001;
 
+        layer.brush.queue(Section::default()
+            .with_screen_position(pos)
+            .add_text(Text::new(&self.label)
+                .with_z(depth)
+                .with_color([0., 1., 0., alpha])
+                .with_scale(screen.small_font.1)));
+
+        let body_top = pos.1 + screen.small_font.1;
+        layer.brush.queue(Section::default()
+            .with_screen_position((pos.0, body_top))
+            .add_text(ptext.text(screen, alpha, depth)));
+
+        let output_top = body_top + screen.large_font.1 *
+            self.max_height as f32;
+        layer.brush.queue(Section::default()
+            .with_screen_position((pos.0, output_top))
+            .add_text(Text::new(&self.output)
+                .with_z(depth)
+                .with_color([0., 0., 1., alpha])
+                .with_scale(screen.small_font.1)));
+
+        depth
     }
 }
 
@@ -613,7 +710,8 @@ impl Animator {
                     for (pt, pc) in proc.call_stack.drain(..) {
                         call_stack.push((Rc::clone(&ptvec[pt]), pc));
                     }
-                    anim.update(call_stack, proc.output, now, screen);
+                    anim.update(call_stack, proc.output, proc.play.is_some(),
+                                now, screen);
                     self.anims.push(anim);
                 }
             }
@@ -657,23 +755,131 @@ impl Animator {
 
 impl<'a> Animator {
     fn animate<B,C>(&'a self, ctxt: &mut C,
-                    tess_queue : &mut Vec<Tess<B, Vertex>>,
-                    sections: &mut Vec<Section<'a>>,
+                    layers: &mut Vec<Layer<B>>,
+                    brush_cache: &mut Vec<GlyphBrush<B>>,
+                    rear_brush: &mut GlyphBrush<B>,
+                    font: &FontArc,
                     screen: &ScreenSettings,
                     now: Instant)
     where
         C: GraphicsContext<Backend = B>,
-        B: ?Sized + backend::tess::Tess<Vertex, (), (), Interleaved>
-                  + backend::tess::Tess<(), (), (), Interleaved>
+        [[f32; 4]; 4]: backend::shader::Uniformable<B>,
+        TextureBinding<Dim2, NormUnsigned>: backend::shader::Uniformable<B>,
+        B: backend::tess::Tess<Vertex, (), (), Interleaved>
+         + backend::tess::Tess<(), (), (), Interleaved>
+         + backend::texture::Texture<Dim2, NormR8UI>
+         + backend::shader::Shader
+         + backend::tess::Tess<(), u32, Instance, Interleaved>
+         + backend::pipeline::PipelineBase
+         + backend::pipeline::PipelineTexture<Dim2, NormR8UI>
+         + backend::render_gate::RenderGate
+         + backend::tess_gate::TessGate<(), u32, Instance,
+                                                 Interleaved>
     {
 
-        let mut depth = 0.1;
+        let mut depth = 0.900;
+        let mut depth_min = 0.900;
         for anim in &self.anims {
-            anim.animate(ctxt, tess_queue, sections, screen, depth, now);
-            depth += 0.01
+            let bnds = match anim.bounds(screen, now) {
+                Some(b) => b,
+                _ => continue
+            };
+            let needs_layer = match layers.last() {
+                None => true,
+                Some(l) => bnds.overlaps(&l.bounds)
+            };
+            if needs_layer {
+                depth = depth_min - 0.001;
+                depth_min = depth;
+                let br = brush_cache.pop().unwrap_or_else(||
+                    GlyphBrushBuilder::using_font(font.clone())
+                                      .build(ctxt));
+                layers.push(Layer::new(br));
+            }
+            if let Some(l) = layers.last_mut() {
+                l.bounds.push(bnds);
+                let anim_depth = anim.animate(ctxt, l, rear_brush, screen,
+                                              depth, now);
+                if anim_depth < depth_min {
+                    depth_min = anim_depth;
+                }
+            }
         }
 
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Bounds {
+    top : f32,
+    lft : f32,
+    bot : f32,
+    rgt : f32
+}
+
+impl Bounds {
+    fn new(top: f32, lft: f32, bot: f32, rgt: f32) -> Self {
+        Bounds {
+            top: top
+           ,lft: lft
+           ,bot: bot
+           ,rgt: rgt
+        }
+    }
+
+    fn overlap(&self, other: &Bounds) -> bool {
+        !(self.top >= other.bot || self.bot <= other.top ||
+          self.lft >= other.rgt || self.rgt <= other.lft)
+    }
+
+    fn overlaps<'a, I>(&self, others: I) -> bool
+        where I: IntoIterator<Item = &'a Bounds>
+    {
+        for b in others {
+            if self.overlap(b) { 
+                //print!("Overlap: {:?} {:?}\n", self, b);
+                return true
+            }
+        }
+
+        false
+    }
+}
+
+struct Layer<B>
+    where
+        [[f32; 4]; 4]: backend::shader::Uniformable<B>,
+        TextureBinding<Dim2, NormUnsigned>: backend::shader::Uniformable<B>,
+        B: ?Sized + backend::tess::Tess<Vertex, (), (), Interleaved>
+                  + backend::tess::Tess<(), (), (), Interleaved>
+                  + backend::texture::Texture<Dim2, NormR8UI>
+                  + backend::shader::Shader
+                  + backend::tess::Tess<(), u32, Instance, Interleaved>
+                  
+{
+    brush : GlyphBrush<B>
+   ,boxes : Vec<Tess<B, Vertex>>
+   ,bounds : Vec<Bounds>
+}
+
+impl<B> Layer<B>
+    where
+        [[f32; 4]; 4]: backend::shader::Uniformable<B>,
+        TextureBinding<Dim2, NormUnsigned>: backend::shader::Uniformable<B>,
+        B: ?Sized + backend::tess::Tess<Vertex, (), (), Interleaved>
+                  + backend::tess::Tess<(), (), (), Interleaved>
+                  + backend::texture::Texture<Dim2, NormR8UI>
+                  + backend::shader::Shader
+                  + backend::tess::Tess<(), u32, Instance, Interleaved>
+{
+    fn new(brush : GlyphBrush<B>) -> Self {
+        Layer {
+            brush: brush
+           ,boxes: Vec::new()
+           ,bounds: Vec::new()
+        }
+    }
+
 }
 
 fn main() {
@@ -681,7 +887,7 @@ fn main() {
     let baseuri = read_args();
 
     let client = FungeClient::new(&baseuri);
-    let sleep_dur = Duration::from_millis(10);
+    let sleep_dur = Duration::from_millis(5);
 
     let mut width = 640;
     let mut height = 480;
@@ -700,9 +906,11 @@ fn main() {
     let font = ab_glyph::FontArc::try_from_slice(
                     include_bytes!("DejaVuSansMono.ttf")
                 ).expect("Failed to load font.");
-    let mut glyph_brush = GlyphBrushBuilder::using_font(&font)
-                            .build(&mut surface);
+    let mut glyph_brush = GlyphBrushBuilder::using_font(font.clone())
+                                            .build(&mut surface);
 
+    let mut rear_brush = GlyphBrushBuilder::using_font(font.clone())
+                                           .build(&mut surface);
     let mut program = surface
             .new_shader_program::<VertexSemantics, (), ()>()
             .from_strings(VS_STR, None, None, FS_STR)
@@ -727,6 +935,7 @@ fn main() {
                                          VertexRGBA::new([0., 0., 1., 1.]),
                                          10, 10);
 
+    let mut brush_cache = Vec::new();
     let start = Instant::now();
     let mut frames :u64 = 0;
     'outer: loop {
@@ -802,11 +1011,14 @@ fn main() {
 
         glyph_brush.queue(errbar.make_text());
 
-        let mut sects = Vec::new();
-        animator.animate(&mut surface, &mut tess_queue, &mut sects, &screen,
-                         now);
-        for sect in sects.drain(..) {
-            glyph_brush.queue(sect);
+        let mut layers = Vec::new();
+
+        animator.animate(&mut surface, &mut layers, &mut brush_cache,
+                         &mut rear_brush, &font, &screen, now);
+
+        rear_brush.process_queued(&mut surface);
+        for l in layers.iter_mut() {
+            l.brush.process_queued(&mut surface);
         }
 
         glyph_brush.process_queued(&mut surface);
@@ -815,6 +1027,20 @@ fn main() {
             &back_buffer,
             &PipelineState::default().set_clear_color([0.0, 0.0, 0.0, 1.]),
             |mut pipeline, mut shd_gate| {
+                rear_brush.draw_queued(&mut pipeline, &mut shd_gate,
+                                       width as u32, height as u32)?;
+                for mut l in layers.drain(..) {
+                    shd_gate.shade(&mut program, |_, _, mut rdr_gate| {
+                        rdr_gate.render(&rs, |mut tess_gate| {
+                            for t in &l.boxes {
+                                tess_gate.render(t)?;
+                            }
+                            Ok(())
+                        })
+                    })?;
+                    l.brush.draw_queued(&mut pipeline, &mut shd_gate,
+                                        width as u32, height as u32)?;
+                }
                 shd_gate.shade(&mut program, |_, _, mut rdr_gate| {
                     rdr_gate.render(&rs, |mut tess_gate| {
                         for t in tess_queue.iter().rev() {
@@ -828,6 +1054,9 @@ fn main() {
             },
         );
 
+        for l in layers.drain(..).rev() {
+            brush_cache.push(l.brush);
+        }
         render.assume().into_result().expect("Render failed.");
         surface.window.swap_buffers();
         frames += 1;
