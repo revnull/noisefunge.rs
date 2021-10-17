@@ -620,6 +620,7 @@ impl<'a> Animated {
             depth -= 0.001;
         }
 
+        depth -= 0.001;
         let hl = screen.highlight.rgb_shift(self.pid).with_alpha(alpha);
         draw_highlight(last.1, hl, depth);
         depth -= 0.001;
@@ -753,6 +754,47 @@ impl Animator {
     }
 }
 
+fn get_layer<'a, C, B>(ctxt: &mut C, layers: &'a mut Vec<Layer<B>>,
+                       brush_cache: &mut Vec<GlyphBrush<B>>, font: &FontArc,
+                       bounds: &Bounds) -> &'a mut Layer<B>
+    where
+        C: GraphicsContext<Backend = B>,
+        [[f32; 4]; 4]: backend::shader::Uniformable<B>,
+        TextureBinding<Dim2, NormUnsigned>: backend::shader::Uniformable<B>,
+        B: backend::tess::Tess<Vertex, (), (), Interleaved>
+         + backend::tess::Tess<(), (), (), Interleaved>
+         + backend::texture::Texture<Dim2, NormR8UI>
+         + backend::shader::Shader
+         + backend::tess::Tess<(), u32, Instance, Interleaved>
+         + backend::pipeline::PipelineBase
+         + backend::pipeline::PipelineTexture<Dim2, NormR8UI>
+         + backend::render_gate::RenderGate
+         + backend::tess_gate::TessGate<(), u32, Instance,
+                                                 Interleaved>
+{
+    let mut best = None;
+    for i in (0..layers.len()).rev() {
+        if bounds.overlaps(&layers[i].bounds) {
+            break;
+        }
+        best = Some(i);
+    }
+
+    let i = match best {
+        None => {
+            let br = brush_cache.pop().unwrap_or_else(||
+                        GlyphBrushBuilder::using_font(font.clone())
+                                          .build(ctxt));
+            layers.push(Layer::new(br));
+            layers.len() - 1
+        }
+        Some(i) => i
+    };
+
+    layers[i].bounds.push(*bounds);
+    &mut layers[i]
+}
+
 impl<'a> Animator {
     fn animate<B,C>(&'a self, ctxt: &mut C,
                     layers: &mut Vec<Layer<B>>,
@@ -778,32 +820,15 @@ impl<'a> Animator {
     {
 
         let mut depth = 0.900;
-        let mut depth_min = 0.900;
         for anim in &self.anims {
-            let bnds = match anim.bounds(screen, now) {
+            let bounds = match anim.bounds(screen, now) {
                 Some(b) => b,
                 _ => continue
             };
-            let needs_layer = match layers.last() {
-                None => true,
-                Some(l) => bnds.overlaps(&l.bounds)
-            };
-            if needs_layer {
-                depth = depth_min - 0.001;
-                depth_min = depth;
-                let br = brush_cache.pop().unwrap_or_else(||
-                    GlyphBrushBuilder::using_font(font.clone())
-                                      .build(ctxt));
-                layers.push(Layer::new(br));
-            }
-            if let Some(l) = layers.last_mut() {
-                l.bounds.push(bnds);
-                let anim_depth = anim.animate(ctxt, l, rear_brush, screen,
-                                              depth, now);
-                if anim_depth < depth_min {
-                    depth_min = anim_depth;
-                }
-            }
+            depth -= 0.001;
+            let layer = get_layer(ctxt, layers, brush_cache,
+                                  font, &bounds);
+            depth = anim.animate(ctxt, layer, rear_brush, screen, depth, now);
         }
 
     }
@@ -837,7 +862,6 @@ impl Bounds {
     {
         for b in others {
             if self.overlap(b) { 
-                //print!("Overlap: {:?} {:?}\n", self, b);
                 return true
             }
         }
@@ -1020,7 +1044,6 @@ fn main() {
         for l in layers.iter_mut() {
             l.brush.process_queued(&mut surface);
         }
-
         glyph_brush.process_queued(&mut surface);
 
         let render = surface.new_pipeline_gate().pipeline(
