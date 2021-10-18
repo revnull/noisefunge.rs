@@ -352,6 +352,7 @@ impl Scroll {
     }
 }
 
+#[derive(Debug)]
 struct Fade<A>(A, VertexRGBA, Instant);
 
 struct Animated {
@@ -612,12 +613,12 @@ impl<'a> Animated {
         };
         
         for Fade(fade_pc, hl, start) in &self.fades {
+            depth -= 0.001;
             let age = now.duration_since(*start).as_secs_f32();
             if age > 2. { continue }
             let alpha = 0.45 * (2. - age);
             let alpha = alpha * alpha;
             draw_highlight(*fade_pc, hl.with_alpha(alpha), depth);
-            depth -= 0.001;
         }
 
         depth -= 0.001;
