@@ -18,7 +18,7 @@
 use noisefunge::api::*;
 use clap::{Arg, App};
 use std::time::{Duration, Instant};
-use glfw::{Action, Context as _, Key, WindowEvent};
+use glfw::{Action, Context as _, Key, WindowEvent, PixelImage};
 use luminance_glfw::GlfwSurface;
 use luminance_windowing::{WindowDim, WindowOpt};
 use luminance::{context::GraphicsContext, pipeline::PipelineState};
@@ -35,6 +35,7 @@ use luminance::pixel::{NormR8UI, NormUnsigned};
 use luminance::texture::{Dim2};
 use glyph_brush::Text;
 use std::collections::{HashSet, HashMap};
+use std::convert::TryInto;
 use std::cmp;
 use std::mem::{take, replace};
 use std::rc::Rc;
@@ -907,6 +908,31 @@ impl<B> Layer<B>
 
 }
 
+const ICO_16: &[u8; 1024] = include_bytes!("icons/icon16.dat");
+const ICO_32: &[u8; 4096] = include_bytes!("icons/icon32.dat");
+const ICO_128: &[u8; 65536] = include_bytes!("icons/icon128.dat");
+
+fn ico_to_vec(bytes: &[u8], len: usize) -> Vec<u32> {
+    let mut vec = Vec::new();
+    for i in (0..len).step_by(4) {
+        vec.push(u32::from_le_bytes(
+            bytes[i..i+4].try_into().expect("count not read icon.")));
+    }
+    return vec
+}
+
+fn icons() -> Vec<PixelImage> {
+    let mut vec = Vec::new();
+    vec.push(PixelImage { width : 16, height : 16,
+                          pixels : ico_to_vec(ICO_16, ICO_16.len())});
+    vec.push(PixelImage { width : 32, height : 32,
+                          pixels : ico_to_vec(ICO_32, ICO_32.len())});
+    vec.push(PixelImage { width : 128, height : 128,
+                          pixels : ico_to_vec(ICO_128, ICO_128.len())});
+
+    vec
+}
+
 fn main() {
 
     let baseuri = read_args();
@@ -941,6 +967,8 @@ fn main() {
             .from_strings(VS_STR, None, None, FS_STR)
             .unwrap()
             .ignore_warnings();
+
+    surface.window.set_icon_from_pixels(icons());
 
     let mut beat = 0;
 
