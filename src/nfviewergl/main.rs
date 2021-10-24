@@ -219,6 +219,10 @@ impl ErrBar {
         self.size_check = true;
     }
 
+    fn clear(&mut self) {
+        self.errs = String::new();
+    }
+
     fn make_bar<B,C>(&self, ctxt: &mut C) -> Tess<B, Vertex>
     where
         C: GraphicsContext<Backend = B>,
@@ -1004,6 +1008,11 @@ fn main() {
 
                 WindowEvent::Key(Key::F, _, Action::Press, _) => {
                     fps = !fps;
+                }
+
+                WindowEvent::Key(Key::R, _, Action::Press, _) => {
+                    errbar.clear();
+                    animator = Animator::new();
                 }
 
                 WindowEvent::Key(Key::Equal, _, Action::Press, _) => {
