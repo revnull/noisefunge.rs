@@ -215,7 +215,7 @@ impl ErrBar {
     fn push_err(&mut self, msg : &str) {
         self.errs.push_str(" ");
         self.errs.push_str(msg);
-        print!("err: {}\n", &self.errs);
+        //print!("err: {}\n", &self.errs);
         self.size_check = true;
     }
 
@@ -1037,7 +1037,7 @@ fn main() {
 
                 // Handle window resizing.
                 WindowEvent::FramebufferSize(new_width, new_height) => {
-                    print!("New size {}x{}\n", new_width, new_height);
+                    //print!("New size {}x{}\n", new_width, new_height);
                     width = new_width as u32;
                     height = new_height as u32;
                     dims = Dimensions(width, height);
