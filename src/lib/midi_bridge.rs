@@ -38,6 +38,7 @@ pub enum FilterSpec {
     Solo,
     RandomArp(Rc<[u64]>),
     Arp(Dir, Rc<[u64]>),
+    Pause(u64)
 }
 
 fn parse_durs(v: Vec<&str>) -> Result<Rc<[u64]>, String> {
@@ -76,6 +77,15 @@ impl FilterSpec {
             return Ok(FilterSpec::RandomArp(parse_durs(v)?));
         }
 
+        if v[0] == "pause" {
+            let durs = parse_durs(v)?;
+            if durs.len() != 1 {
+                return Err(
+                    "pause note filter only takes one duration".to_string());
+            }
+            return Ok(FilterSpec::Pause(durs[0]));
+        }
+
         let dir = match v[0] {
             "up" => Dir::Up,
             "down" => Dir::Down,
@@ -94,6 +104,8 @@ impl FilterSpec {
                 Box::new(RandomArp::new(channel, durs.clone())),
             FilterSpec::Arp(dir, durs) =>
                 Box::new(Arp::new(channel, *dir, durs.clone())),
+            FilterSpec::Pause(dur) =>
+                Box::new(Pause::new(channel, *dur)),
         }
     }
 }
@@ -155,6 +167,75 @@ impl Filter for Basic {
     fn resolve(&mut self, _handle: &JackHandle) -> bool {
         self.current = None;
         !self.off_events.is_empty()
+    }
+}
+
+struct Pause {
+    channel: u8,
+    pause: u64,
+    active: [Option<u64>; 127],
+    off_events: BTreeMap<u64, Vec<u8>>,
+    held: bool,
+    current: Option<u64>
+}
+
+impl Pause {
+    fn new(channel: u8, pause: u64) -> Self {
+        Pause {
+            channel: channel,
+            pause: pause,
+            active: arr![None; 127],
+            off_events: BTreeMap::new(),
+            held: false,
+            current: None
+        }
+    }
+}
+
+impl Filter for Pause {
+    fn activate(&mut self, beat: u64, handle: &JackHandle) {
+        if self.current.is_some() {
+            panic!("Basic::activate called twice");
+        }
+        self.current = Some(beat);
+
+        if let Some(evs) = self.off_events.remove(&beat) {
+            for pch in evs {
+                handle.send_midi(MidiMsg::Off(self.channel, pch));
+            }
+        }
+
+        self.held = false;
+        for i in 0..127 {
+            let end = match self.active[i] {
+                None => { continue },
+                Some(e) => e,
+            };
+            if end > beat {
+                self.held = true;
+            } else {
+                self.active[i] = None;
+            }
+        }
+    }
+
+    fn push(&mut self, note: &Note, handle: &JackHandle) {
+        let beat = self.current.expect("Basic::push without activate");
+        let i = note.pch as usize;
+        if i >= 127 { return }
+        if self.active[i].is_some() { return }
+        self.active[i] = Some(beat + note.dur as u64 + self.pause);
+
+        self.off_events.entry(beat + note.dur as u64)
+                       .or_insert_with(|| Vec::new())
+                       .push(note.pch);
+
+        handle.send_midi(MidiMsg::On(note.cha, note.pch, note.vel));
+    }
+
+    fn resolve(&mut self, _handle: &JackHandle) -> bool {
+        self.current = None;
+        self.held || !self.off_events.is_empty()
     }
 }
 
