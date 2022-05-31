@@ -31,12 +31,14 @@ pub struct ChannelConfig {
     pub note_filter: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct SubprocessCommand {
     pub name: String,
     pub command: Vec<String>,
     pub stdin: Option<String>,
     pub stdout: Option<String>,
-    pub stderr: Option<String>
+    pub stderr: Option<String>,
+    pub reload: bool
 }
 
 pub struct FungedConfig {
@@ -140,12 +142,19 @@ fn get_subprocesses(settings: &Config) -> Vec<SubprocessCommand> {
             |v| v.clone().into_str().expect(
                 &format!("subprocess.{} has invalid stderr", name)));
 
+        let reload = match table.get("reload") {
+            None => true,
+            Some(v) => v.clone().into_bool().expect(
+                &format!("subprocess.{} has invalid reload", name))
+        };
+
         subs.push(SubprocessCommand {
             name: name,
             command: cmd,
             stdin: stdin,
             stdout: stdout,
-            stderr: stderr
+            stderr: stderr,
+            reload: reload
             });
     }
 

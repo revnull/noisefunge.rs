@@ -21,19 +21,23 @@ use std::mem;
 use std::process::{Child, Command, Stdio};
 use crate::config::SubprocessCommand;
 
-pub struct SubprocessHandle(Vec<(String, Child)>);
+pub struct SubprocessHandle(Vec<(SubprocessCommand, Option<Child>)>);
 
 impl Drop for SubprocessHandle {
     fn drop(&mut self) {
         let mut remaining = Vec::new();
 
-        for (name, mut sub) in self.0.drain(..) {
-            info!("Killing process: {}", name);
+        for (sc, subopt) in self.0.drain(..) {
+            let mut sub = match subopt {
+                None => continue,
+                Some(s) => s
+            };
+            info!("Killing process: {}", sc.name);
             match sub.kill() {
                 Ok(_) => {},
-                Err(_) => error!("Failed to kill {}", name),
+                Err(_) => error!("Failed to kill {}", sc.name),
             }
-            remaining.push((name, sub));
+            remaining.push((sc.name, sub));
         }
         
         let mut attempts = 10;
@@ -61,49 +65,53 @@ impl Drop for SubprocessHandle {
     }
 }
 
+fn launch_child(sub: &SubprocessCommand) -> Child {
+    let stdin = match sub.stdin.as_ref() {
+        None => { Stdio::null() },
+        Some(f) => { File::open(f)
+                          .expect(&format!("Failed to open {}", f))
+                          .into() }
+    };
+
+    let stdout = match sub.stdout.as_ref() {
+        None => { Stdio::inherit() },
+        Some(f) =>
+            OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(f)
+                        .expect(&format!("Failed to open {}", f))
+                        .into(),
+    };
+
+    let stderr = match sub.stderr.as_ref() {
+        None => { Stdio::inherit() },
+        Some(f) =>
+            OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(f)
+                        .expect(&format!("Failed to open {}", f))
+                        .into(),
+    };
+
+    Command::new(&sub.command[0])
+            .args(&sub.command[1..])
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr)
+            .spawn()
+            .expect(&format!("Failed to start {}", sub.name))
+
+}
+
 impl SubprocessHandle {
-    pub fn new(procs: &Vec<SubprocessCommand>) -> Self {
+    pub fn new(procs: Vec<SubprocessCommand>) -> Self {
         let mut res = Vec::new();
 
         for sub in procs {
-            let stdin = match sub.stdin.as_ref() {
-                None => { Stdio::null() },
-                Some(f) => { File::open(f)
-                                  .expect(&format!("Failed to open {}", f))
-                                  .into() }
-            };
-
-            let stdout = match sub.stdout.as_ref() {
-                None => { Stdio::inherit() },
-                Some(f) =>
-                    OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open(f)
-                                .expect(&format!("Failed to open {}", f))
-                                .into(),
-            };
-
-            let stderr = match sub.stderr.as_ref() {
-                None => { Stdio::inherit() },
-                Some(f) =>
-                    OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open(f)
-                                .expect(&format!("Failed to open {}", f))
-                                .into(),
-            };
-
-            let child = Command::new(&sub.command[0])
-                                .args(&sub.command[1..])
-                                .stdin(stdin)
-                                .stdout(stdout)
-                                .stderr(stderr)
-                                .spawn()
-                                .expect(&format!("Failed to start {}", sub.name));
-
-            res.push((sub.name.clone(), child));
+            let ch = launch_child(&sub);
+            res.push((sub, Some(ch)))
         }
 
         SubprocessHandle(res)
@@ -112,17 +120,31 @@ impl SubprocessHandle {
     pub fn check_children(&mut self) {
         let mut children = mem::take(&mut self.0);
 
-        for (name, mut c) in children.drain(..) {
-            match c.try_wait() {
-                Ok(Some(status)) => {
-                    warn!("Child {} exited with status {}", name, status);
-                },
-                Ok(None) => {
-                    self.0.push((name, c));
-                },
-                Err(e) => {
-                    warn!("Could not wait on child {}: {}", name, e);
-                    self.0.push((name, c));
+        for (sc, child) in children.drain(..) {
+            match child {
+                None => self.0.push((sc, None)),
+                Some(mut c) => {
+                    match c.try_wait() {
+                        Ok(Some(status)) => {
+                            warn!("Child {} exited with status {}",
+                                  sc.name, status);
+                            if sc.reload {
+                                warn!("Restarting {}", sc.name);
+                                let ch = launch_child(&sc);
+                                self.0.push((sc, Some(ch)))
+                            } else {
+                                self.0.push((sc, None))
+                            }
+                        },
+                        Ok(None) => {
+                            self.0.push((sc, Some(c)));
+                        },
+                        Err(e) => {
+                            warn!("Could not wait on child {}: {}",
+                                  sc.name, e);
+                            self.0.push((sc, Some(c)));
+                        }
+                    }
                 }
             }
         }

@@ -1,6 +1,6 @@
 [package]
 name = "noisefunge"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Rev. Johnny Healey <rev.null@gmail.com>"]
 edition = "2018"
 license = "GPL-3.0"

@@ -121,7 +121,7 @@ fn main() {
 
     let mut server = FungedServer::new(config);
 
-    let mut subs = SubprocessHandle::new(&server.config.subprocesses);
+    let mut subs = SubprocessHandle::new(server.config.subprocesses.clone());
 
     let mut handle = JackHandle::new(&server.config);
     let mut connect_handle = handle.take_connect_handle();
